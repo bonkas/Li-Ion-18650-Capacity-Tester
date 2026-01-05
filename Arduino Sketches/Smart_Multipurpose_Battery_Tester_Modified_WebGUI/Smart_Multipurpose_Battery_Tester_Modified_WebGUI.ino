@@ -356,7 +356,8 @@ void processCommand(JsonDocument& doc) {
             Capacity_f = 0;
             dataLogger.reset();
             startTime = millis();
-            digitalWrite(Mosfet_Pin, HIGH);
+            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
+            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
             currentState = STATE_CHARGING;
             beep(100);
         }
@@ -393,7 +394,8 @@ void processCommand(JsonDocument& doc) {
             Capacity_f = 0;
             dataLogger.reset();
             startTime = millis();
-            digitalWrite(Mosfet_Pin, HIGH);
+            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
+            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
             currentState = STATE_ANALYZE_CHARGE;
             beep(100);
         }
@@ -620,7 +622,8 @@ void handleMenuState() {
             Capacity_f = 0;
             dataLogger.reset();
             startTime = millis();
-            digitalWrite(Mosfet_Pin, HIGH);
+            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
+            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
             currentState = STATE_CHARGING;
         }
         else if (selectedMode == 1) {
@@ -641,7 +644,8 @@ void handleMenuState() {
             Capacity_f = 0;
             dataLogger.reset();
             startTime = millis();
-            digitalWrite(Mosfet_Pin, HIGH);
+            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
+            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
             currentState = STATE_ANALYZE_CHARGE;
         }
         else if (selectedMode == 3) {

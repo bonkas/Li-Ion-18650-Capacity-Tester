@@ -63,6 +63,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         }
         .mode-btn:hover { background: #1f3460; }
         .mode-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .mode-btn.selected { background: #2a4a80; border: 2px solid #4ecca3; }
         .mode-btn.active { background: #4ecca3; color: #1a1a2e; }
         .mode-btn.charge { border-left: 3px solid #2ecc71; }
         .mode-btn.discharge { border-left: 3px solid #e74c3c; }
@@ -111,10 +112,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             background: #1a1a2e;
             border-radius: 8px;
         }
-        #chart {
-            width: 100%;
-            height: 100%;
-        }
+        #chart { width: 100%; height: 100%; }
 
         .settings-row {
             display: flex;
@@ -134,8 +132,27 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         }
         .settings-input input { width: 80px; text-align: center; }
 
-        .abort-btn {
-            width: 100%;
+        .control-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .start-btn {
+            padding: 15px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: bold;
+            cursor: pointer;
+            background: #2ecc71;
+            color: white;
+            transition: all 0.2s;
+        }
+        .start-btn:hover { background: #27ae60; }
+        .start-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+        .stop-btn {
             padding: 15px;
             border: none;
             border-radius: 10px;
@@ -146,8 +163,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             color: white;
             transition: all 0.2s;
         }
-        .abort-btn:hover { background: #c0392b; }
-        .abort-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+        .stop-btn:hover { background: #c0392b; }
+        .stop-btn:disabled { opacity: 0.3; cursor: not-allowed; }
 
         .wifi-panel { display: none; }
         .wifi-panel.show { display: block; }
@@ -193,11 +210,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             font-size: 0.85em;
         }
         .legend-item { display: flex; align-items: center; gap: 5px; }
-        .legend-color {
-            width: 20px;
-            height: 3px;
-            border-radius: 2px;
-        }
+        .legend-color { width: 20px; height: 3px; border-radius: 2px; }
         .legend-voltage { background: #3498db; }
         .legend-current { background: #e74c3c; }
 
@@ -220,10 +233,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         </header>
 
         <div class="mode-buttons">
-            <button class="mode-btn charge" onclick="startMode('charge')" id="btnCharge">Charge</button>
-            <button class="mode-btn discharge" onclick="showDischargeSettings()" id="btnDischarge">Discharge</button>
-            <button class="mode-btn analyze" onclick="startMode('analyze')" id="btnAnalyze">Analyze</button>
-            <button class="mode-btn ir" onclick="startMode('ir')" id="btnIR">IR Test</button>
+            <button class="mode-btn charge" onclick="selectMode('charge')" id="btnCharge">Charge</button>
+            <button class="mode-btn discharge" onclick="selectMode('discharge')" id="btnDischarge">Discharge</button>
+            <button class="mode-btn analyze" onclick="selectMode('analyze')" id="btnAnalyze">Analyze</button>
+            <button class="mode-btn ir" onclick="selectMode('ir')" id="btnIR">IR Test</button>
         </div>
 
         <div class="card" id="dischargeSettings" style="display:none;">
@@ -251,13 +264,12 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                     </select>
                 </div>
             </div>
-            <button class="submit-btn" onclick="startDischarge()">Start Discharge</button>
         </div>
 
         <div class="card">
             <div class="status-display">
                 <div class="status-mode" id="currentMode">IDLE</div>
-                <div class="status-state" id="currentState">Ready</div>
+                <div class="status-state" id="currentState">Select a mode and press Start</div>
             </div>
         </div>
 
@@ -293,7 +305,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             </div>
         </div>
 
-        <button class="abort-btn" onclick="abortOperation()" id="abortBtn" disabled>ABORT OPERATION</button>
+        <div class="control-buttons">
+            <button class="start-btn" onclick="startOperation()" id="startBtn">START</button>
+            <button class="stop-btn" onclick="stopOperation()" id="stopBtn" disabled>STOP</button>
+        </div>
 
         <div class="card wifi-panel" id="wifiPanel">
             <div class="card-title">WiFi Configuration</div>
@@ -310,44 +325,34 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
     </div>
 
     <script>
-        // WebSocket connection
         let ws = null;
         let isRunning = false;
+        let selectedMode = 'charge';  // Default selected mode
 
-        // Chart data storage
         const voltageData = [];
         const currentData = [];
         const timeData = [];
         const maxPoints = 3600;
-
-        // Chart configuration
         const voltageMin = 2.5, voltageMax = 4.5;
         const currentMin = 0, currentMax = 1100;
 
-        // Draw chart
         function drawChart() {
             const canvas = document.getElementById('chart');
             const ctx = canvas.getContext('2d');
             const rect = canvas.parentElement.getBoundingClientRect();
-
             canvas.width = rect.width;
             canvas.height = rect.height;
 
-            const w = canvas.width;
-            const h = canvas.height;
+            const w = canvas.width, h = canvas.height;
             const padding = { top: 20, right: 50, bottom: 30, left: 50 };
             const chartW = w - padding.left - padding.right;
             const chartH = h - padding.top - padding.bottom;
 
-            // Clear
             ctx.fillStyle = '#1a1a2e';
             ctx.fillRect(0, 0, w, h);
 
-            // Draw grid
             ctx.strokeStyle = '#333';
             ctx.lineWidth = 1;
-
-            // Horizontal grid lines
             for (let i = 0; i <= 4; i++) {
                 const y = padding.top + (chartH / 4) * i;
                 ctx.beginPath();
@@ -356,10 +361,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 ctx.stroke();
             }
 
-            // Draw axes labels
             ctx.font = '11px sans-serif';
-
-            // Voltage axis (left)
             ctx.fillStyle = '#3498db';
             for (let i = 0; i <= 4; i++) {
                 const v = voltageMax - (voltageMax - voltageMin) * (i / 4);
@@ -367,7 +369,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 ctx.fillText(v.toFixed(1) + 'V', 5, y + 4);
             }
 
-            // Current axis (right)
             ctx.fillStyle = '#e74c3c';
             for (let i = 0; i <= 4; i++) {
                 const c = currentMax - (currentMax - currentMin) * (i / 4);
@@ -375,7 +376,6 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 ctx.fillText(c.toFixed(0), w - 45, y + 4);
             }
 
-            // Time axis
             ctx.fillStyle = '#888';
             if (timeData.length > 0) {
                 const maxTime = Math.max(...timeData);
@@ -387,41 +387,32 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             }
 
             if (voltageData.length < 2) return;
-
-            // Calculate x positions
             const xScale = chartW / (timeData.length - 1 || 1);
 
-            // Draw voltage line
             ctx.strokeStyle = '#3498db';
             ctx.lineWidth = 2;
             ctx.beginPath();
             for (let i = 0; i < voltageData.length; i++) {
                 const x = padding.left + i * xScale;
                 const y = padding.top + chartH - ((voltageData[i] - voltageMin) / (voltageMax - voltageMin)) * chartH;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
             ctx.stroke();
 
-            // Draw current line
             ctx.strokeStyle = '#e74c3c';
             ctx.lineWidth = 2;
             ctx.beginPath();
             for (let i = 0; i < currentData.length; i++) {
                 const x = padding.left + i * xScale;
                 const y = padding.top + chartH - ((currentData[i] - currentMin) / (currentMax - currentMin)) * chartH;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
             ctx.stroke();
         }
 
-        // Add data point
         function addDataPoint(data) {
             if (voltageData.length >= maxPoints) {
-                voltageData.shift();
-                currentData.shift();
-                timeData.shift();
+                voltageData.shift(); currentData.shift(); timeData.shift();
             }
             voltageData.push(data.v);
             currentData.push(data.c);
@@ -429,28 +420,19 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             drawChart();
         }
 
-        // Load history
         function loadHistory(points) {
-            voltageData.length = 0;
-            currentData.length = 0;
-            timeData.length = 0;
+            voltageData.length = 0; currentData.length = 0; timeData.length = 0;
             points.forEach(p => {
-                voltageData.push(p.v);
-                currentData.push(p.c);
-                timeData.push(p.t);
+                voltageData.push(p.v); currentData.push(p.c); timeData.push(p.t);
             });
             drawChart();
         }
 
-        // Clear chart
         function clearChart() {
-            voltageData.length = 0;
-            currentData.length = 0;
-            timeData.length = 0;
+            voltageData.length = 0; currentData.length = 0; timeData.length = 0;
             drawChart();
         }
 
-        // WebSocket connection
         function connectWebSocket() {
             const host = window.location.hostname;
             ws = new WebSocket('ws://' + host + '/ws');
@@ -473,28 +455,18 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 try {
                     const data = JSON.parse(event.data);
                     handleMessage(data);
-                } catch (e) {
-                    console.error('Parse error:', e);
-                }
+                } catch (e) { console.error('Parse error:', e); }
             };
 
-            ws.onerror = function(error) {
-                console.error('WebSocket error:', error);
-            };
+            ws.onerror = function(error) { console.error('WebSocket error:', error); };
         }
 
-        // Handle messages
         function handleMessage(data) {
-            if (data.type === 'status') {
-                updateStatus(data);
-            } else if (data.type === 'datapoint') {
-                addDataPoint(data);
-            } else if (data.type === 'history') {
-                loadHistory(data.points);
-            }
+            if (data.type === 'status') updateStatus(data);
+            else if (data.type === 'datapoint') addDataPoint(data);
+            else if (data.type === 'history') loadHistory(data.points);
         }
 
-        // Update status
         function updateStatus(data) {
             const modeNames = {
                 'idle': 'IDLE',
@@ -515,12 +487,17 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             document.getElementById('elapsed').textContent = data.time || '00:00:00';
 
             isRunning = data.mode !== 'idle' && data.mode !== 'complete';
-            document.getElementById('abortBtn').disabled = !isRunning;
 
+            // Update button states
+            document.getElementById('startBtn').disabled = isRunning;
+            document.getElementById('stopBtn').disabled = !isRunning;
+
+            // Disable mode selection while running
             ['btnCharge', 'btnDischarge', 'btnAnalyze', 'btnIR'].forEach(id => {
                 document.getElementById(id).disabled = isRunning;
             });
 
+            // Show active mode from device
             document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
             if (data.mode.includes('charge') && !data.mode.includes('discharge')) {
                 document.getElementById('btnCharge').classList.add('active');
@@ -533,32 +510,43 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             }
         }
 
-        // Send command
         function sendCommand(cmd) {
             if (ws && ws.readyState === WebSocket.OPEN) {
                 ws.send(JSON.stringify(cmd));
             }
         }
 
-        function startMode(mode) {
+        // Select mode (doesn't start it)
+        function selectMode(mode) {
+            selectedMode = mode;
+
+            // Update visual selection
+            document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('selected'));
+            if (mode === 'charge') document.getElementById('btnCharge').classList.add('selected');
+            else if (mode === 'discharge') document.getElementById('btnDischarge').classList.add('selected');
+            else if (mode === 'analyze') document.getElementById('btnAnalyze').classList.add('selected');
+            else if (mode === 'ir') document.getElementById('btnIR').classList.add('selected');
+
+            // Show/hide discharge settings
+            document.getElementById('dischargeSettings').style.display =
+                (mode === 'discharge') ? 'block' : 'none';
+        }
+
+        // Start the selected operation
+        function startOperation() {
             clearChart();
-            sendCommand({ cmd: 'start_' + mode });
+
+            if (selectedMode === 'discharge') {
+                const cutoff = parseFloat(document.getElementById('cutoffVoltage').value);
+                const current = parseInt(document.getElementById('dischargeCurrent').value);
+                sendCommand({ cmd: 'start_discharge', cutoff: cutoff, current: current });
+            } else {
+                sendCommand({ cmd: 'start_' + selectedMode });
+            }
         }
 
-        function showDischargeSettings() {
-            const panel = document.getElementById('dischargeSettings');
-            panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
-        }
-
-        function startDischarge() {
-            const cutoff = parseFloat(document.getElementById('cutoffVoltage').value);
-            const current = parseInt(document.getElementById('dischargeCurrent').value);
-            clearChart();
-            sendCommand({ cmd: 'start_discharge', cutoff: cutoff, current: current });
-            document.getElementById('dischargeSettings').style.display = 'none';
-        }
-
-        function abortOperation() {
+        // Stop/abort the current operation
+        function stopOperation() {
             sendCommand({ cmd: 'abort' });
         }
 
@@ -573,10 +561,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             alert('WiFi configuration sent.');
         }
 
-        // Initialize
         window.addEventListener('load', function() {
             drawChart();
             connectWebSocket();
+            selectMode('charge');  // Default selection
         });
 
         window.addEventListener('resize', drawChart);
