@@ -606,21 +606,21 @@ bool selectCutoffVoltage() {
         Mode_Button.read();
 
         // Increase cutoff voltage with UP button
-        if (UP_Button.isPressed() && cutoffVoltage < Max_BAT_level) {
+        if (UP_Button.wasReleased() && cutoffVoltage < Max_BAT_level) {
             cutoffVoltage += 0.1;
             beep(100);
             delay(300);
         }
 
         // Decrease cutoff voltage with DOWN button
-        if (Down_Button.isPressed() && cutoffVoltage > Min_BAT_level) {
+        if (Down_Button.wasReleased() && cutoffVoltage > Min_BAT_level) {
             cutoffVoltage -= 0.1;
             beep(100);
             delay(300);
         }
 
         // Confirm cutoff voltage with MODE button
-        if (Mode_Button.isPressed()) {
+        if (Mode_Button.wasReleased()) {
             cutoffSelected = true;
             beep(300);
         }
@@ -652,21 +652,21 @@ bool selectDischargeCurrent() {
         Mode_Button.read();
 
         // Increase discharge current with UP button
-        if (UP_Button.isPressed() && PWM_Index < (Array_Size - 1)) {
+        if (UP_Button.wasReleased() && PWM_Index < (Array_Size - 1)) {
             PWM_Value = PWM[++PWM_Index];
             beep(100);
             delay(300);
         }
 
         // Decrease discharge current with DOWN button
-        if (Down_Button.isPressed() && PWM_Index > 0) {
+        if (Down_Button.wasReleased() && PWM_Index > 0) {
             PWM_Value = PWM[--PWM_Index];
             beep(100);
             delay(300);
         }
 
         // Confirm current selection with MODE button
-        if (Mode_Button.isPressed()) {
+        if (Mode_Button.wasReleased()) {
             currentSelected = true;
             beep(300);
         }
