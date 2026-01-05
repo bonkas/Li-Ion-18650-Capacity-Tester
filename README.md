@@ -9,6 +9,51 @@ This project is based on the excellent work by **Open Green Energy** (opengreene
 - **Original Project**: [DIY Smart Multipurpose Battery Tester](https://www.instructables.com/DIY-Smart-Multipurpose-Battery-Tester/)
 - **Author Website**: [www.opengreenenergy.com](http://www.opengreenenergy.com)
 
+## Modifications (Fork Changes)
+
+This fork includes several improvements to the original firmware, primarily focused on button handling and user experience:
+
+### Button Debounce Fixes
+
+| Issue | Original Behavior | Fixed Behavior |
+|-------|-------------------|----------------|
+| **Button method** | Used `isPressed()` which triggers continuously while held | Changed to `wasReleased()` for one action per press |
+| **Menu skipping** | Selecting Discharge would skip the cutoff voltage screen | Added `clearButtonStates()` to clear pending button events between screens |
+| **Debounce timing** | 400ms delay, still experienced bounce | Reduced to 250ms with proper state-based detection |
+
+### Abort Functionality
+
+- **Press MODE during any operation** to safely abort and return to main menu
+- Works during: Charge, Discharge, Analyze (all phases), and IR Test
+- Hardware is automatically reset to safe idle state (charging off, load off)
+- **Double beep** indicates abort (vs single beep for normal completion)
+
+### New Helper Functions
+
+| Function | Purpose |
+|----------|---------|
+| `clearButtonStates()` | Waits for all buttons to be released and clears pending events |
+| `resetToIdle()` | Safely turns off charging MOSFET and discharge load |
+| `checkAbort()` | Checks for MODE button press, resets hardware, returns abort status |
+
+### Other Changes
+
+- **Voltage reference** adjusted from 1.227V to 1.26V for improved accuracy
+- **IR Test comment** corrected: PWM_Index 6 = 500mA (not 1A as originally commented)
+- **Code cleanup**: Consistent button handling across all menus
+
+### Modified Files
+
+The modified Arduino sketch is located in:
+```
+Arduino Sketches/Smart_Multipurpose_Battery_Tester_Modified/
+```
+
+The original unmodified sketch is preserved in:
+```
+Arduino Sketches/Smart_Multipurpose_Battery_Tester_20241025/
+```
+
 ## Features
 
 ### Operating Modes
