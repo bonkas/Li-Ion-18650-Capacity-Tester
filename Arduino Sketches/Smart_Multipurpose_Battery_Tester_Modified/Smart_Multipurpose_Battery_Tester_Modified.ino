@@ -130,6 +130,7 @@ void loop() {
 void selectMode() {
     modeSelected = false;
     selectedMode = 0;
+    clearButtonStates();  // Clear any pending button states
 
     while (!modeSelected) {
         Mode_Button.read();
@@ -580,6 +581,7 @@ void displayFinalCapacity(float capacity, bool chargingComplete) {
     display.display();  // Update the OLED display
 
     // Keep the screen on until a button is pressed
+    clearButtonStates();  // Clear any pending button states
     bool buttonPressed = false;
     while (!buttonPressed) {
         Mode_Button.read();
@@ -600,6 +602,8 @@ void displayFinalCapacity(float capacity, bool chargingComplete) {
 // ========================================= SELECT CUTOFF VOLTAGE ========================================
 bool selectCutoffVoltage() {
     bool cutoffSelected = false;
+    clearButtonStates();  // Clear any pending button states
+
     while (!cutoffSelected) {
         UP_Button.read();
         Down_Button.read();
@@ -645,6 +649,7 @@ bool selectDischargeCurrent() {
     bool currentSelected = false;
     PWM_Index = 0;
     PWM_Value = PWM[PWM_Index];
+    clearButtonStates();  // Clear any pending button states
 
     while (!currentSelected) {
         UP_Button.read();
@@ -745,6 +750,22 @@ void beep(int duration) {
     digitalWrite(Buzzer, HIGH);
     delay(duration);
     digitalWrite(Buzzer, LOW);
+}
+
+// ========================================= CLEAR BUTTON STATES ========================================
+void clearButtonStates() {
+    // Wait for all buttons to be released
+    do {
+        Mode_Button.read();
+        UP_Button.read();
+        Down_Button.read();
+        delay(10);
+    } while (Mode_Button.isPressed() || UP_Button.isPressed() || Down_Button.isPressed());
+
+    // Read once more to clear any wasReleased/wasPressed flags
+    Mode_Button.read();
+    UP_Button.read();
+    Down_Button.read();
 }
 
 
