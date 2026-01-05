@@ -152,10 +152,9 @@ void selectMode() {
         }
 
         // Confirm selection with MODE button press
-        if (Mode_Button.isPressed()) {
+        if (Mode_Button.wasReleased()) {
             beep(300);
             modeSelected = true;
-            delay(400);  // Debounce delay to prevent multiple presses
         }
 
         // Display the menu options and highlight the selected one
