@@ -264,8 +264,14 @@ void chargeMode() {
     digitalWrite(Mosfet_Pin, HIGH);  // Turn on MOSFET to start charging
 
     while (!Done) {
+        // Check for abort
+        if (checkAbort()) {
+            selectMode();
+            return;
+        }
+
         updateTiming();
-        BAT_Voltage = measureBatteryVoltage();  // Measure battery voltage    
+        BAT_Voltage = measureBatteryVoltage();  // Measure battery voltage
         display.clearDisplay();
         // Simulate battery charging progression
         updateBatteryDisplay(true);  // True indicates charging
@@ -277,7 +283,7 @@ void chargeMode() {
         display.print(":");
         display.print(Minute);
         display.print(":");
-        display.print(Second);       
+        display.print(Second);
         display.setTextSize(2);
         display.setCursor(15, 40);
         display.print("V:");
@@ -290,9 +296,9 @@ void chargeMode() {
             Done = true;
             digitalWrite(Mosfet_Pin, LOW);  // Turn off MOSFET to stop charging
             beep(300);  // Beep to indicate charging is complete
-            displayFinalCapacity(Capacity_f, true);  // Pass true for charging complete            
-        }  
-        //  delay(100);      
+            displayFinalCapacity(Capacity_f, true);  // Pass true for charging complete
+        }
+        //  delay(100);
     }
     selectMode();  // Return to mode selection after charging is complete
 }
@@ -312,6 +318,12 @@ void dischargeMode() {
         analogWrite(PWM_Pin, PWM_Value);  // Start discharging by applying PWM to the load
 
         while (!Done) {
+            // Check for abort
+            if (checkAbort()) {
+                selectMode();
+                return;
+            }
+
             updateTiming();
             BAT_Voltage = measureBatteryVoltage();  // Measure the battery voltage
 
@@ -397,8 +409,15 @@ void analyzeMode() {
     digitalWrite(Mosfet_Pin, HIGH);  // Turn on MOSFET to start charging
 
     while (!Done) {
+        // Check for abort
+        if (checkAbort()) {
+            inAnalyzeMode = false;
+            selectMode();
+            return;
+        }
+
         updateTiming();
-        BAT_Voltage = measureBatteryVoltage();  // Measure battery voltage    
+        BAT_Voltage = measureBatteryVoltage();  // Measure battery voltage
         display.clearDisplay();
         // Simulate battery charging progression
         updateBatteryDisplay(true);  // True indicates charging
@@ -410,7 +429,7 @@ void analyzeMode() {
         display.print(":");
         display.print(Minute);
         display.print(":");
-        display.print(Second);       
+        display.print(Second);
         display.setTextSize(2);
         display.setCursor(15, 40);
         display.print("V:");
@@ -426,13 +445,22 @@ void analyzeMode() {
         //delay(100);
     }
 
-    // Step 3: Rest for 5 minutes to allow the battery to stabilize
+    // Step 3: Rest for 3 minutes to allow the battery to stabilize
     display.clearDisplay();
     display.setTextSize(2);
     display.setCursor(5, 25);
     display.print("Resting..");
     display.display();
-    delay(180000);  // Wait for 3 minutes (180000 ms)
+
+    // Rest with abort check (180 seconds total, check every 100ms)
+    for (int i = 0; i < 1800; i++) {
+        if (checkAbort()) {
+            inAnalyzeMode = false;
+            selectMode();
+            return;
+        }
+        delay(100);
+    }
 
     // Step 4: Discharge the battery at 500mA to calculate real capacity
     cutoffVoltage = 3.0;  // Set cutoff voltage for discharge
@@ -445,50 +473,57 @@ void analyzeMode() {
     digitalWrite(Mosfet_Pin, LOW);  // Ensure the charging MOSFET is off
     analogWrite(PWM_Pin, PWM_Value);  // Start discharging   
 
-            while (!Done) {
-            updateTiming();
-            BAT_Voltage = measureBatteryVoltage();  // Measure the battery voltage
+    while (!Done) {
+        // Check for abort
+        if (checkAbort()) {
+            inAnalyzeMode = false;
+            selectMode();
+            return;
+        }
 
-            // Calculate time elapsed since the last update
-            unsigned long currentTime = millis();
-            float elapsedTimeInHours = (currentTime - lastUpdateTime) / 3600000.0;  // Convert ms to hours
+        updateTiming();
+        BAT_Voltage = measureBatteryVoltage();  // Measure the battery voltage
 
-            // Update capacity using I * t (Current * elapsed time)
-            if (calc) {
-                Capacity_f += (Current[PWM_Index] + currentOffset) * elapsedTimeInHours;  // Capacity in mAh
-                lastUpdateTime = currentTime;  // Update last update time
-            }
+        // Calculate time elapsed since the last update
+        unsigned long currentTime = millis();
+        float elapsedTimeInHours = (currentTime - lastUpdateTime) / 3600000.0;  // Convert ms to hours
 
-            display.clearDisplay();
-            updateBatteryDisplay(false);  // Update battery icon (false for discharging)
-            display.setTextSize(1);
-            display.setCursor(10, 5);
-            display.print("Analyzing - D");
-            display.setCursor(15, 20);
-            display.print("Time: ");
-            display.print(Hour);
-            display.print(":");
-            display.print(Minute);
-            display.print(":");
-            display.print(Second);
-            display.setCursor(15, 35);
-            display.print("Cap:");
-            display.print(Capacity_f, 1);
-            display.print("mAh");
-            display.setCursor(15, 50);
-            display.print("V: ");
-            display.print(BAT_Voltage, 2);
-            display.print("V");
-            display.display();
+        // Update capacity using I * t (Current * elapsed time)
+        if (calc) {
+            Capacity_f += (Current[PWM_Index] + currentOffset) * elapsedTimeInHours;  // Capacity in mAh
+            lastUpdateTime = currentTime;  // Update last update time
+        }
 
-            if (BAT_Voltage <= cutoffVoltage) {
-                Done = true;
-                analogWrite(PWM_Pin, 0);  // Stop discharging by turning off the load (PWM)
-                beep(300);  // Long beep to indicate discharging is complete
-                displayFinalCapacity(Capacity_f, false);  // Pass false for discharging complete
-            }
-          //  delay(100);
-        }       
+        display.clearDisplay();
+        updateBatteryDisplay(false);  // Update battery icon (false for discharging)
+        display.setTextSize(1);
+        display.setCursor(10, 5);
+        display.print("Analyzing - D");
+        display.setCursor(15, 20);
+        display.print("Time: ");
+        display.print(Hour);
+        display.print(":");
+        display.print(Minute);
+        display.print(":");
+        display.print(Second);
+        display.setCursor(15, 35);
+        display.print("Cap:");
+        display.print(Capacity_f, 1);
+        display.print("mAh");
+        display.setCursor(15, 50);
+        display.print("V: ");
+        display.print(BAT_Voltage, 2);
+        display.print("V");
+        display.display();
+
+        if (BAT_Voltage <= cutoffVoltage) {
+            Done = true;
+            analogWrite(PWM_Pin, 0);  // Stop discharging by turning off the load (PWM)
+            beep(300);  // Long beep to indicate discharging is complete
+            displayFinalCapacity(Capacity_f, false);  // Pass false for discharging complete
+        }
+        //  delay(100);
+    }
 
     inAnalyzeMode = false;  // Reset analyze mode flag
     selectMode();  // Return to mode selection after analyzing
@@ -499,32 +534,51 @@ void internalResistanceMode() {
     float voltageNoLoad = 0;
     float voltageLoad = 0;
     float internalResistance = 0;
-    bool resistanceMeasured = false;
 
     digitalWrite(Mosfet_Pin, LOW);  // Ensure the charging MOSFET is off
 
     // Step 1: Measure voltage without load (open circuit)
     analogWrite(PWM_Pin, 0);  // Ensure no current flows through the load
-    delay(500);  // Let the voltage stabilize
+
+    // Wait for voltage to stabilize with abort check
+    for (int i = 0; i < 5; i++) {
+        if (checkAbort()) {
+            selectMode();
+            return;
+        }
+        delay(100);
+    }
+
     voltageNoLoad = measureBatteryVoltage();  // Measure voltage with no load
 
     // Step 2: Apply load using PWM
-    PWM_Index = 6;  // Index corresponding to 1A current in the Current array
-    PWM_Value = PWM[PWM_Index];  // Set PWM value corresponding to 1A current
+    PWM_Index = 6;  // Index corresponding to 500mA current in the Current array
+    PWM_Value = PWM[PWM_Index];  // Set PWM value corresponding to 500mA current
     analogWrite(PWM_Pin, PWM_Value);  // Apply PWM to control load
 
-    delay(500);  // Let the voltage stabilize under load
+    // Wait for voltage to stabilize under load with abort check
+    for (int i = 0; i < 5; i++) {
+        if (checkAbort()) {
+            selectMode();
+            return;
+        }
+        delay(100);
+    }
+
     voltageLoad = measureBatteryVoltage();  // Measure the loaded voltage
 
     // Calculate the load current and internal resistance using Ohm's Law
-    float currentDrawn = Current[PWM_Index] / 1000.0;     // Convert current in mA to Amps  
+    float currentDrawn = Current[PWM_Index] / 1000.0;     // Convert current in mA to Amps
 
-    // Step 4: Calculate internal resistance using Ohm's Law
+    // Step 3: Calculate internal resistance using Ohm's Law
     if (currentDrawn > 0) {
         internalResistance = (voltageNoLoad - voltageLoad) / currentDrawn;  // R = (V_no_load - V_load) / I
     } else {
         internalResistance = 0;  // Avoid division by zero
     }
+
+    // Turn off the load after measurement
+    analogWrite(PWM_Pin, 0);  // Stop the current flow
 
     // Display the IR test results
     displayIRTestIcon(voltageNoLoad, voltageLoad, internalResistance);
@@ -532,16 +586,16 @@ void internalResistanceMode() {
     // Beep to indicate completion of the IR measurement
     beep(300);
 
-    // Step 5: Turn off the load after measurement
-    analogWrite(PWM_Pin, 0);  // Stop the current flow
-    delay(5000);  // Wait for the user to read the display
-
-    resistanceMeasured = true;
-
-    // Return to the mode selection if measurement is complete
-    if (resistanceMeasured) {
-        selectMode();
+    // Wait for user to read display with abort check (5 seconds)
+    for (int i = 0; i < 50; i++) {
+        if (checkAbort()) {
+            selectMode();
+            return;
+        }
+        delay(100);
     }
+
+    selectMode();
 }
 
 // ========================================= FINAL CAPACITY DISPLAY ON OLED ========================================
@@ -765,6 +819,25 @@ void clearButtonStates() {
     Mode_Button.read();
     UP_Button.read();
     Down_Button.read();
+}
+
+// ========================================= RESET TO IDLE STATE ========================================
+void resetToIdle() {
+    digitalWrite(Mosfet_Pin, LOW);  // Turn off charging MOSFET
+    analogWrite(PWM_Pin, 0);        // Turn off discharge load
+}
+
+// ========================================= CHECK FOR ABORT ========================================
+bool checkAbort() {
+    Mode_Button.read();
+    if (Mode_Button.wasReleased()) {
+        resetToIdle();
+        beep(100);
+        delay(100);
+        beep(100);  // Double beep to indicate abort
+        return true;
+    }
+    return false;
 }
 
 
