@@ -263,6 +263,8 @@ void chargeMode() {
     // If the battery voltage is between Min_BAT_level and FULL_BAT_level, proceed with charging
     digitalWrite(Mosfet_Pin, HIGH);  // Turn on MOSFET to start charging
 
+    clearButtonStates();  // Clear button states before starting charge loop
+
     while (!Done) {
         // Check for abort
         if (checkAbort()) {
@@ -316,6 +318,8 @@ void dischargeMode() {
 
         digitalWrite(Mosfet_Pin, LOW);  // Ensure the charging MOSFET is off
         analogWrite(PWM_Pin, PWM_Value);  // Start discharging by applying PWM to the load
+
+        clearButtonStates();  // Clear button states before starting discharge loop
 
         while (!Done) {
             // Check for abort
@@ -408,6 +412,8 @@ void analyzeMode() {
     // Step 2: Charge the battery until full
     digitalWrite(Mosfet_Pin, HIGH);  // Turn on MOSFET to start charging
 
+    clearButtonStates();  // Clear button states before starting charge loop
+
     while (!Done) {
         // Check for abort
         if (checkAbort()) {
@@ -471,7 +477,9 @@ void analyzeMode() {
     Capacity = 0;  // Reset capacity for this test
     lastUpdateTime = millis();  // Reset the start time for discharge process
     digitalWrite(Mosfet_Pin, LOW);  // Ensure the charging MOSFET is off
-    analogWrite(PWM_Pin, PWM_Value);  // Start discharging   
+    analogWrite(PWM_Pin, PWM_Value);  // Start discharging
+
+    clearButtonStates();  // Clear button states before starting discharge loop
 
     while (!Done) {
         // Check for abort
