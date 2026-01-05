@@ -95,7 +95,8 @@ const byte Buzzer = D7;
 const int BAT_Pin = A0;
 const int Vref_Pin = A1;
 const byte Mosfet_Pin = D2;
-const int CHRG_Pin = A2;      // LP4060 charge status (LOW = charging, HIGH = complete/no battery)
+// Note: A2 and D2 are the SAME pin (GPIO4) on XIAO ESP32C3!
+// Cannot use A2 for CHRG reading as it conflicts with Mosfet_Pin
 
 // Charge current set by R7 (1k) on LP4060: I = 1000mA
 const int CHARGE_CURRENT_MA = 1000;
@@ -131,7 +132,6 @@ void beep(int duration);
 
 float measureVcc();
 float measureBatteryVoltage();
-bool isCharging();
 int getCurrentMA();
 void updateTiming();
 void updateDisplay();
@@ -161,7 +161,6 @@ void setup() {
     pinMode(PWM_Pin, OUTPUT);
     pinMode(Buzzer, OUTPUT);
     pinMode(Mosfet_Pin, OUTPUT);
-    pinMode(CHRG_Pin, INPUT);     // LP4060 charge status input
     analogWrite(PWM_Pin, 0);
     digitalWrite(Mosfet_Pin, LOW);
 
@@ -562,18 +561,15 @@ void updateTiming() {
     Hour = (elapsedTime / (1000 * 60 * 60));
 }
 
-// Check if LP4060 is actively charging (CHRG pin is LOW when charging)
-bool isCharging() {
-    return digitalRead(CHRG_Pin) == LOW;
-}
-
 // Get current in mA based on current state
+// Note: Cannot read LP4060 CHRG pin as A2 conflicts with D2 (Mosfet_Pin)
+// Returns estimated current based on mode
 int getCurrentMA() {
     switch (currentState) {
         case STATE_CHARGING:
         case STATE_ANALYZE_CHARGE:
-            // Return charge current if LP4060 is actively charging
-            return isCharging() ? CHARGE_CURRENT_MA : 0;
+            // Return estimated charge current (set by R7 on LP4060)
+            return CHARGE_CURRENT_MA;
 
         case STATE_DISCHARGING:
         case STATE_ANALYZE_DISCHARGE:
