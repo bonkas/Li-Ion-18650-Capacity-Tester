@@ -105,6 +105,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         .stat-value.current { color: #e74c3c; }
         .stat-value.capacity { color: #2ecc71; }
         .stat-value.time { color: #f39c12; }
+        .stat-value.ir { color: #9b59b6; }
 
         .chart-container {
             position: relative;
@@ -290,6 +291,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 <div class="stat-item">
                     <div class="stat-value time" id="elapsed">--:--:--</div>
                     <div class="stat-label">Elapsed Time</div>
+                </div>
+                <div class="stat-item" id="irStatItem" style="display:none;">
+                    <div class="stat-value ir" id="irValue">--</div>
+                    <div class="stat-label">Internal R (mΩ)</div>
                 </div>
             </div>
         </div>
@@ -496,6 +501,15 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             document.getElementById('current').textContent = data.current || '0';
             document.getElementById('capacity').textContent = data.capacity ? data.capacity.toFixed(1) : '0';
             document.getElementById('elapsed').textContent = data.time || '00:00:00';
+
+            // Show IR result when available
+            if (data.ir !== undefined) {
+                document.getElementById('irValue').textContent = data.ir.toFixed(0);
+                document.getElementById('irStatItem').style.display = 'block';
+            } else if (data.mode !== 'ir') {
+                // Hide IR display when not in IR mode
+                document.getElementById('irStatItem').style.display = 'none';
+            }
 
             isRunning = data.mode !== 'idle' && data.mode !== 'complete';
 

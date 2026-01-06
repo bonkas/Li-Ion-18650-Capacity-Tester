@@ -499,6 +499,11 @@ void sendStatusUpdate() {
     doc["time"] = timeStr;
     doc["cutoff"] = cutoffVoltage;
 
+    // Include IR measurement results
+    if (currentState == STATE_IR_DISPLAY) {
+        doc["ir"] = internalResistance * 1000;  // Send in milliohms
+    }
+
     String output;
     serializeJson(doc, output);
     ws.textAll(output);
