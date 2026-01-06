@@ -46,7 +46,8 @@ enum DeviceState {
     STATE_ANALYZE_DISCHARGE,
     STATE_IR_MEASURE,
     STATE_IR_DISPLAY,
-    STATE_COMPLETE
+    STATE_COMPLETE,
+    STATE_WIFI_INFO
 };
 
 DeviceState currentState = STATE_MENU;
@@ -155,6 +156,7 @@ void handleAnalyzeDischargeState();
 void handleIRMeasureState();
 void handleIRDisplayState();
 void handleCompleteState();
+void handleWiFiInfoState();
 
 void drawBatteryOutline();
 void drawBatteryFill(int level);
@@ -259,6 +261,9 @@ void loop() {
             break;
         case STATE_COMPLETE:
             handleCompleteState();
+            break;
+        case STATE_WIFI_INFO:
+            handleWiFiInfoState();
             break;
         default:
             currentState = STATE_MENU;
@@ -780,13 +785,13 @@ int getCurrentMA() {
 
 // ========================================= STATE HANDLERS ========================================
 void handleMenuState() {
-    // Handle button navigation
+    // Handle button navigation (5 menu items: 0-4)
     if (UP_Button.wasReleased()) {
-        selectedMode = (selectedMode == 0) ? 3 : selectedMode - 1;
+        selectedMode = (selectedMode == 0) ? 4 : selectedMode - 1;
         beep(100);
     }
     if (Down_Button.wasReleased()) {
-        selectedMode = (selectedMode == 3) ? 0 : selectedMode + 1;
+        selectedMode = (selectedMode == 4) ? 0 : selectedMode + 1;
         beep(100);
     }
     if (Mode_Button.wasReleased()) {
@@ -848,21 +853,27 @@ void handleMenuState() {
             digitalWrite(Mosfet_Pin, LOW);
             currentState = STATE_IR_MEASURE;
         }
+        else if (selectedMode == 4) {
+            // WiFi Info
+            currentState = STATE_WIFI_INFO;
+        }
     }
 
-    // Display menu
+    // Display menu (adjusted spacing for 5 items)
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(25, 0);
     display.print("Select Mode:");
-    display.setCursor(25, 12);
+    display.setCursor(20, 11);
     display.print((selectedMode == 0) ? "> Charge" : "  Charge");
-    display.setCursor(25, 26);
+    display.setCursor(20, 22);
     display.print((selectedMode == 1) ? "> Discharge" : "  Discharge");
-    display.setCursor(25, 40);
+    display.setCursor(20, 33);
     display.print((selectedMode == 2) ? "> Analyze" : "  Analyze");
-    display.setCursor(25, 54);
+    display.setCursor(20, 44);
     display.print((selectedMode == 3) ? "> IR Test" : "  IR Test");
+    display.setCursor(20, 55);
+    display.print((selectedMode == 4) ? "> WiFi Info" : "  WiFi Info");
     display.display();
 }
 
@@ -1286,6 +1297,54 @@ void handleCompleteState() {
     drawBatteryOutline();
     drawBatteryFill(Capacity_f > 0 ? 0 : 100);
 
+    display.display();
+}
+
+void handleWiFiInfoState() {
+    // Return to menu on any button press
+    if (Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+        currentState = STATE_MENU;
+        return;
+    }
+
+    // Display WiFi information
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(0, 0);
+    display.print("=== WiFi Info ===");
+
+    // Access Point info
+    display.setCursor(0, 12);
+    if (wifiMode == CFG_WIFI_AP || wifiMode == CFG_WIFI_BOTH) {
+        display.print("AP: ");
+        display.print(AP_SSID);
+        display.setCursor(0, 22);
+        display.print("    ");
+        display.print(WiFi.softAPIP());
+    } else {
+        display.print("AP: Disabled");
+    }
+
+    // Station info
+    display.setCursor(0, 34);
+    if (WiFi.status() == WL_CONNECTED) {
+        display.print("Net: ");
+        // Truncate SSID if too long
+        if (sta_ssid.length() > 15) {
+            display.print(sta_ssid.substring(0, 12));
+            display.print("...");
+        } else {
+            display.print(sta_ssid);
+        }
+        display.setCursor(0, 44);
+        display.print("    ");
+        display.print(WiFi.localIP());
+    } else {
+        display.print("Net: Not connected");
+    }
+
+    display.setCursor(0, 56);
+    display.print("Press any btn: Back");
     display.display();
 }
 
