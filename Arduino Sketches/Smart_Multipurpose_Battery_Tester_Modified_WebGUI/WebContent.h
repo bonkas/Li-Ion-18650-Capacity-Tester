@@ -502,13 +502,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             document.getElementById('capacity').textContent = data.capacity ? data.capacity.toFixed(1) : '0';
             document.getElementById('elapsed').textContent = data.time || '00:00:00';
 
-            // Show IR result when available
+            // Show IR result when available (persists until new operation starts)
             if (data.ir !== undefined) {
                 document.getElementById('irValue').textContent = data.ir.toFixed(0);
                 document.getElementById('irStatItem').style.display = 'block';
-            } else if (data.mode !== 'ir') {
-                // Hide IR display when not in IR mode
-                document.getElementById('irStatItem').style.display = 'none';
             }
 
             isRunning = data.mode !== 'idle' && data.mode !== 'complete';
@@ -561,6 +558,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         // Start the selected operation
         function startOperation() {
             clearChart();
+            // Hide previous IR result when starting new operation
+            document.getElementById('irStatItem').style.display = 'none';
 
             if (selectedMode === 'discharge') {
                 const cutoff = parseFloat(document.getElementById('cutoffVoltage').value);
