@@ -61,10 +61,11 @@ const float FULL_BAT_level = 4.18;
 const float DAMAGE_BAT_level = 2.5;
 const float NO_BAT_level = 0.3;
 
-int Current[] = {0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000};
-int PWM[] = {0, 4, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100};
+int Current[] = {0, 50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1500, 2000};
+int PWM[] = {0, 4, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 150, 200};
 int Array_Size = sizeof(Current) / sizeof(Current[0]);
 int currentOffset = 25;
+const int HIGH_CURRENT_THRESHOLD = 1000;  // mA - warn user above this
 int PWM_Value = 0;
 int PWM_Index = 6;  // Default to 500mA
 
@@ -928,10 +929,17 @@ void handleSelectCurrentState() {
 
     display.clearDisplay();
     display.setTextSize(1);
-    display.setCursor(2, 10);
+    display.setCursor(2, 5);
     display.print("Select Dischrg Curr:");
+
+    // Show warning for high currents
+    if (Current[PWM_Index] > HIGH_CURRENT_THRESHOLD) {
+        display.setCursor(2, 52);
+        display.print("!! HIGH CURRENT !!");
+    }
+
     display.setTextSize(2);
-    display.setCursor(15, 30);
+    display.setCursor(15, 25);
     display.print("I:");
     display.print(Current[PWM_Index]);
     display.print("mA");

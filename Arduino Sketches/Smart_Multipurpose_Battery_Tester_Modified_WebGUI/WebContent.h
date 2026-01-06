@@ -251,7 +251,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <div class="settings-row">
                 <span class="settings-label">Discharge Current</span>
                 <div class="settings-input">
-                    <select id="dischargeCurrent">
+                    <select id="dischargeCurrent" onchange="checkHighCurrent()">
                         <option value="100">100 mA</option>
                         <option value="200">200 mA</option>
                         <option value="300">300 mA</option>
@@ -262,8 +262,13 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                         <option value="800">800 mA</option>
                         <option value="900">900 mA</option>
                         <option value="1000">1000 mA</option>
+                        <option value="1500">1500 mA ⚠</option>
+                        <option value="2000">2000 mA ⚠</option>
                     </select>
                 </div>
+            </div>
+            <div id="highCurrentWarning" style="display:none; background:#e74c3c; color:white; padding:8px; border-radius:5px; margin-top:10px; text-align:center;">
+                ⚠ HIGH CURRENT - May cause MOSFET overheating! Ensure adequate cooling.
             </div>
         </div>
 
@@ -644,6 +649,12 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
         function disconnectWifi() {
             sendCommand({ cmd: 'wifi_disconnect' });
+        }
+
+        function checkHighCurrent() {
+            const current = parseInt(document.getElementById('dischargeCurrent').value);
+            const warning = document.getElementById('highCurrentWarning');
+            warning.style.display = (current > 1000) ? 'block' : 'none';
         }
 
         window.addEventListener('load', function() {
