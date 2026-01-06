@@ -215,6 +215,58 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         .legend-voltage { background: #3498db; }
         .legend-current { background: #e74c3c; }
 
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: 0.3s;
+            border-radius: 26px;
+        }
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 20px;
+            width: 20px;
+            left: 3px;
+            bottom: 3px;
+            background-color: #888;
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+        input:checked + .toggle-slider {
+            background-color: #4ecca3;
+        }
+        input:checked + .toggle-slider:before {
+            transform: translateX(24px);
+            background-color: white;
+        }
+        .stage-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px solid #333;
+        }
+        .stage-title {
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .stage-title.stage1 { color: #4ecca3; }
+        .stage-title.stage2 { color: #3498db; }
+
         @media (max-width: 500px) {
             .mode-buttons { grid-template-columns: repeat(2, 1fr); }
             .stat-value { font-size: 1.4em; }
@@ -269,6 +321,88 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             </div>
             <div id="highCurrentWarning" style="display:none; background:#e74c3c; color:white; padding:8px; border-radius:5px; margin-top:10px; text-align:center;">
                 ⚠ HIGH CURRENT - May cause MOSFET overheating! Ensure adequate cooling.
+            </div>
+        </div>
+
+        <div class="card" id="analyzeSettings" style="display:none;">
+            <div class="card-title">Analyze Settings</div>
+
+            <div class="settings-row">
+                <span class="settings-label">Staged Discharge Mode</span>
+                <div class="settings-input">
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="stagedMode" onchange="toggleStagedSettings()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+
+            <div id="stagedSettings" style="display:none;">
+                <div class="stage-section">
+                    <div class="stage-title stage1">Stage 1 (High Current)</div>
+
+                    <div class="settings-row">
+                        <span class="settings-label">Discharge Current</span>
+                        <div class="settings-input">
+                            <select id="stage1Current" onchange="validateStagedSettings()">
+                                <option value="300">300 mA</option>
+                                <option value="400">400 mA</option>
+                                <option value="500" selected>500 mA</option>
+                                <option value="600">600 mA</option>
+                                <option value="700">700 mA</option>
+                                <option value="800">800 mA</option>
+                                <option value="900">900 mA</option>
+                                <option value="1000">1000 mA</option>
+                                <option value="1500">1500 mA ⚠</option>
+                                <option value="2000">2000 mA ⚠</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="settings-row">
+                        <span class="settings-label">Transition Voltage</span>
+                        <div class="settings-input">
+                            <input type="number" id="stage1Transition" value="3.3" min="3.0" max="3.8" step="0.1" onchange="validateStagedSettings()"> V
+                        </div>
+                    </div>
+                </div>
+
+                <div class="stage-section">
+                    <div class="stage-title stage2">Stage 2 (Low Current)</div>
+
+                    <div class="settings-row">
+                        <span class="settings-label">Discharge Current</span>
+                        <div class="settings-input">
+                            <select id="stage2Current" onchange="validateStagedSettings()">
+                                <option value="100">100 mA</option>
+                                <option value="200">200 mA</option>
+                                <option value="300" selected>300 mA</option>
+                                <option value="400">400 mA</option>
+                                <option value="500">500 mA</option>
+                                <option value="600">600 mA</option>
+                                <option value="700">700 mA</option>
+                                <option value="800">800 mA</option>
+                                <option value="900">900 mA</option>
+                                <option value="1000">1000 mA</option>
+                                <option value="1500">1500 mA ⚠</option>
+                                <option value="2000">2000 mA ⚠</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="settings-row">
+                        <span class="settings-label">Final Cutoff</span>
+                        <div class="settings-input">
+                            <input type="number" id="stage2Cutoff" value="3.0" min="2.8" max="3.2" step="0.1" onchange="validateStagedSettings()"> V
+                        </div>
+                    </div>
+                </div>
+
+                <div id="stagedValidationError" style="display:none; background:#e74c3c; color:white; padding:8px; border-radius:5px; margin-top:10px; text-align:center;">
+                </div>
+                <div id="analyzeHighCurrentWarning" style="display:none; background:#e74c3c; color:white; padding:8px; border-radius:5px; margin-top:10px; text-align:center;">
+                    ⚠ HIGH CURRENT - May cause MOSFET overheating! Ensure adequate cooling.
+                </div>
             </div>
         </div>
 
@@ -548,6 +682,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 'analyze_charge': 'ANALYZE (Charging)',
                 'analyze_rest': 'ANALYZE (Resting)',
                 'analyze_discharge': 'ANALYZE (Discharging)',
+                'analyze_discharge_s1': 'ANALYZE (Stage 1)',
+                'analyze_discharge_s2': 'ANALYZE (Stage 2)',
                 'ir': 'IR TEST',
                 'complete': 'COMPLETE'
             };
@@ -607,9 +743,11 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             else if (mode === 'analyze') document.getElementById('btnAnalyze').classList.add('selected');
             else if (mode === 'ir') document.getElementById('btnIR').classList.add('selected');
 
-            // Show/hide discharge settings
+            // Show/hide settings panels
             document.getElementById('dischargeSettings').style.display =
                 (mode === 'discharge') ? 'block' : 'none';
+            document.getElementById('analyzeSettings').style.display =
+                (mode === 'analyze') ? 'block' : 'none';
         }
 
         // Start the selected operation
@@ -622,6 +760,23 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 const cutoff = parseFloat(document.getElementById('cutoffVoltage').value);
                 const current = parseInt(document.getElementById('dischargeCurrent').value);
                 sendCommand({ cmd: 'start_discharge', cutoff: cutoff, current: current });
+            } else if (selectedMode === 'analyze') {
+                const staged = document.getElementById('stagedMode').checked;
+                if (staged) {
+                    if (!validateStagedSettings()) {
+                        return;  // Don't start if validation fails
+                    }
+                    sendCommand({
+                        cmd: 'start_analyze',
+                        staged: true,
+                        stage1_current: parseInt(document.getElementById('stage1Current').value),
+                        stage1_transition: parseFloat(document.getElementById('stage1Transition').value),
+                        stage2_current: parseInt(document.getElementById('stage2Current').value),
+                        stage2_cutoff: parseFloat(document.getElementById('stage2Cutoff').value)
+                    });
+                } else {
+                    sendCommand({ cmd: 'start_analyze' });
+                }
             } else {
                 sendCommand({ cmd: 'start_' + selectedMode });
             }
@@ -666,6 +821,59 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             const current = parseInt(document.getElementById('dischargeCurrent').value);
             const warning = document.getElementById('highCurrentWarning');
             warning.style.display = (current > 1000) ? 'block' : 'none';
+        }
+
+        function toggleStagedSettings() {
+            const staged = document.getElementById('stagedMode').checked;
+            document.getElementById('stagedSettings').style.display = staged ? 'block' : 'none';
+            if (staged) {
+                validateStagedSettings();
+            }
+        }
+
+        function validateStagedSettings() {
+            const s1Current = parseInt(document.getElementById('stage1Current').value);
+            const s1Transition = parseFloat(document.getElementById('stage1Transition').value);
+            const s2Current = parseInt(document.getElementById('stage2Current').value);
+            const s2Cutoff = parseFloat(document.getElementById('stage2Cutoff').value);
+
+            const errorDiv = document.getElementById('stagedValidationError');
+            let errors = [];
+
+            // Validate: Stage 2 current must be <= Stage 1 current
+            if (s2Current > s1Current) {
+                errors.push('Stage 2 current must be <= Stage 1');
+            }
+
+            // Validate: Transition voltage must be > final cutoff
+            if (s1Transition <= s2Cutoff) {
+                errors.push('Transition V must be > Final cutoff');
+            }
+
+            // Update Stage 2 current options dynamically
+            const s2Select = document.getElementById('stage2Current');
+            Array.from(s2Select.options).forEach(opt => {
+                opt.disabled = parseInt(opt.value) > s1Current;
+            });
+
+            // Update transition voltage min based on cutoff
+            document.getElementById('stage1Transition').min = (s2Cutoff + 0.1).toFixed(1);
+
+            // Update cutoff max based on transition
+            document.getElementById('stage2Cutoff').max = (s1Transition - 0.1).toFixed(1);
+
+            // Show high current warning if either stage exceeds 1000mA
+            const highCurrentWarning = document.getElementById('analyzeHighCurrentWarning');
+            highCurrentWarning.style.display = (s1Current > 1000 || s2Current > 1000) ? 'block' : 'none';
+
+            if (errors.length > 0) {
+                errorDiv.textContent = errors.join('. ');
+                errorDiv.style.display = 'block';
+                return false;
+            } else {
+                errorDiv.style.display = 'none';
+                return true;
+            }
         }
 
         window.addEventListener('load', function() {

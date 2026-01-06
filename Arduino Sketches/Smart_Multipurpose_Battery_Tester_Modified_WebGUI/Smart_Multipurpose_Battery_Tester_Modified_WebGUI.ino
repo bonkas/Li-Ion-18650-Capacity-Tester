@@ -48,7 +48,10 @@ enum DeviceState {
     STATE_IR_MEASURE,
     STATE_IR_DISPLAY,
     STATE_COMPLETE,
-    STATE_WIFI_INFO
+    STATE_WIFI_INFO,
+    STATE_ANALYZE_CONFIG_TOGGLE,    // Enable/disable staged mode
+    STATE_ANALYZE_CONFIG_STAGE1,    // Stage 1: current + transition voltage
+    STATE_ANALYZE_CONFIG_STAGE2     // Stage 2: current + final cutoff
 };
 
 DeviceState currentState = STATE_MENU;
@@ -77,6 +80,14 @@ float BAT_Voltage = 0;
 float internalResistance = 0;
 float voltageNoLoad = 0;
 float voltageLoad = 0;
+
+// ========================================= STAGED ANALYZE SETTINGS ========================================
+bool stagedAnalyzeEnabled = false;
+int stage1CurrentIndex = 6;           // Index into Current[] array (default: 500mA)
+float stage1TransitionVoltage = 3.3;  // Voltage to transition to Stage 2
+int stage2CurrentIndex = 4;           // Index into Current[] array (default: 300mA)
+float stage2FinalCutoff = 3.0;        // Final cutoff voltage
+int analyzeDischargeStage = 1;        // Current stage during discharge (1 or 2)
 
 // ========================================= TIMING ========================================
 unsigned long previousMillis = 0;
@@ -168,6 +179,9 @@ void handleIRMeasureState();
 void handleIRDisplayState();
 void handleCompleteState();
 void handleWiFiInfoState();
+void handleAnalyzeConfigToggleState();
+void handleAnalyzeConfigStage1State();
+void handleAnalyzeConfigStage2State();
 
 void drawBatteryOutline();
 void drawBatteryFill(int level);
@@ -275,6 +289,15 @@ void loop() {
             break;
         case STATE_WIFI_INFO:
             handleWiFiInfoState();
+            break;
+        case STATE_ANALYZE_CONFIG_TOGGLE:
+            handleAnalyzeConfigToggleState();
+            break;
+        case STATE_ANALYZE_CONFIG_STAGE1:
+            handleAnalyzeConfigStage1State();
+            break;
+        case STATE_ANALYZE_CONFIG_STAGE2:
+            handleAnalyzeConfigStage2State();
             break;
         default:
             currentState = STATE_MENU;
@@ -607,6 +630,48 @@ void processCommand(JsonDocument& doc) {
             sendError("Battery damaged (below 2.5V)");
             return;
         }
+
+        // Parse optional staged discharge parameters
+        stagedAnalyzeEnabled = doc["staged"] | false;
+
+        if (stagedAnalyzeEnabled) {
+            // Stage 1 settings
+            int s1Current = doc["stage1_current"] | 500;
+            float s1TransV = doc["stage1_transition"] | 3.3;
+
+            // Stage 2 settings
+            int s2Current = doc["stage2_current"] | 300;
+            float s2Cutoff = doc["stage2_cutoff"] | 3.0;
+
+            // Validate: transition voltage > final cutoff
+            if (s1TransV <= s2Cutoff) {
+                sendError("Transition voltage must be > final cutoff");
+                return;
+            }
+
+            // Validate: Stage 2 current <= Stage 1 current
+            if (s2Current > s1Current) {
+                sendError("Stage 2 current must be <= Stage 1 current");
+                return;
+            }
+
+            // Find matching PWM indices
+            stage1CurrentIndex = 6;  // Default
+            stage2CurrentIndex = 4;  // Default
+            for (int i = 0; i < Array_Size; i++) {
+                if (Current[i] == s1Current) stage1CurrentIndex = i;
+                if (Current[i] == s2Current) stage2CurrentIndex = i;
+            }
+
+            stage1TransitionVoltage = s1TransV;
+            stage2FinalCutoff = s2Cutoff;
+        } else {
+            // Single stage defaults
+            stage1CurrentIndex = 6;  // 500mA
+            stage2FinalCutoff = 3.0;
+        }
+
+        analyzeDischargeStage = 1;
         Capacity_f = 0;
         dataLogger.reset();
         startTime = millis();
@@ -695,7 +760,13 @@ void sendStatusUpdate() {
         case STATE_DISCHARGING: doc["mode"] = "discharge"; break;
         case STATE_ANALYZE_CHARGE: doc["mode"] = "analyze_charge"; break;
         case STATE_ANALYZE_REST: doc["mode"] = "analyze_rest"; break;
-        case STATE_ANALYZE_DISCHARGE: doc["mode"] = "analyze_discharge"; break;
+        case STATE_ANALYZE_DISCHARGE:
+            if (stagedAnalyzeEnabled) {
+                doc["mode"] = (analyzeDischargeStage == 1) ? "analyze_discharge_s1" : "analyze_discharge_s2";
+            } else {
+                doc["mode"] = "analyze_discharge";
+            }
+            break;
         case STATE_IR_MEASURE:
         case STATE_IR_DISPLAY: doc["mode"] = "ir"; break;
         case STATE_COMPLETE: doc["mode"] = "complete"; break;
@@ -715,6 +786,15 @@ void sendStatusUpdate() {
     // Include IR measurement results
     if (currentState == STATE_IR_DISPLAY) {
         doc["ir"] = internalResistance * 1000;  // Send in milliohms
+    }
+
+    // Include staged discharge info when in analyze discharge
+    if (currentState == STATE_ANALYZE_DISCHARGE && stagedAnalyzeEnabled) {
+        doc["stage"] = analyzeDischargeStage;
+        doc["stage1_current"] = Current[stage1CurrentIndex];
+        doc["stage1_transition"] = stage1TransitionVoltage;
+        doc["stage2_current"] = Current[stage2CurrentIndex];
+        doc["stage2_cutoff"] = stage2FinalCutoff;
     }
 
     String output;
@@ -904,7 +984,7 @@ void handleMenuState() {
             currentState = STATE_SELECT_CUTOFF;
         }
         else if (selectedMode == 2) {
-            // Analyze
+            // Analyze - go to configuration first
             BAT_Voltage = measureBatteryVoltage();
             if (BAT_Voltage < NO_BAT_level || BAT_Voltage < DAMAGE_BAT_level) {
                 display.clearDisplay();
@@ -914,13 +994,7 @@ void handleMenuState() {
                 delay(2000);
                 return;
             }
-            Capacity_f = 0;
-            dataLogger.reset();
-            startTime = millis();
-            lastCapacityUpdate = millis();
-            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
-            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
-            currentState = STATE_ANALYZE_CHARGE;
+            currentState = STATE_ANALYZE_CONFIG_TOGGLE;
         }
         else if (selectedMode == 3) {
             // IR Test
@@ -1210,9 +1284,19 @@ void handleAnalyzeRestState() {
 
     // Wait for 3 minutes
     if (millis() - restStartTime >= 180000) {
-        // Start discharge
-        cutoffVoltage = 3.0;
-        PWM_Index = 6;  // 500mA
+        // Start discharge with configured values
+        analyzeDischargeStage = 1;
+
+        if (stagedAnalyzeEnabled) {
+            // Use Stage 1 settings first
+            cutoffVoltage = stage1TransitionVoltage;
+            PWM_Index = stage1CurrentIndex;
+        } else {
+            // Single stage: use configured current and final cutoff
+            cutoffVoltage = stage2FinalCutoff;
+            PWM_Index = stage1CurrentIndex;
+        }
+
         PWM_Value = PWM[PWM_Index];
         Capacity_f = 0;
         startTime = millis();
@@ -1235,6 +1319,7 @@ void handleAnalyzeDischargeState() {
     // Check for abort
     if (Mode_Button.wasReleased()) {
         resetToIdle();
+        analyzeDischargeStage = 1;  // Reset stage
         beep(100);
         delay(100);
         beep(100);
@@ -1254,12 +1339,30 @@ void handleAnalyzeDischargeState() {
     // Log data
     dataLogger.addDataPoint(BAT_Voltage, Current[PWM_Index], Capacity_f);
 
-    // Check if discharge complete
+    // Check for stage transition (staged mode, stage 1, voltage reached transition point)
+    if (stagedAnalyzeEnabled && analyzeDischargeStage == 1) {
+        if (BAT_Voltage <= stage1TransitionVoltage) {
+            // Transition to Stage 2
+            analyzeDischargeStage = 2;
+            cutoffVoltage = stage2FinalCutoff;
+            PWM_Index = stage2CurrentIndex;
+            PWM_Value = PWM[PWM_Index];
+            analogWrite(PWM_Pin, PWM_Value);
+            beep(100);  // Audible feedback for stage transition
+        }
+    }
+
+    // Check if discharge complete (final cutoff reached)
     if (BAT_Voltage <= cutoffVoltage) {
-        analogWrite(PWM_Pin, 0);
-        beep(300);
-        currentState = STATE_COMPLETE;
-        return;
+        // In staged mode, only complete if we're in stage 2
+        // In single-stage mode, complete immediately
+        if (!stagedAnalyzeEnabled || analyzeDischargeStage == 2) {
+            analogWrite(PWM_Pin, 0);
+            analyzeDischargeStage = 1;  // Reset for next run
+            beep(300);
+            currentState = STATE_COMPLETE;
+            return;
+        }
     }
 
     // Update display
@@ -1267,7 +1370,12 @@ void handleAnalyzeDischargeState() {
     updateBatteryDisplay(false);
     display.setTextSize(1);
     display.setCursor(10, 5);
-    display.print("Analyzing - D");
+    if (stagedAnalyzeEnabled) {
+        display.print("Analyze - S");
+        display.print(analyzeDischargeStage);
+    } else {
+        display.print("Analyzing - D");
+    }
     display.setCursor(15, 20);
     display.print("Time: ");
     display.print(Hour);
@@ -1451,6 +1559,228 @@ void handleWiFiInfoState() {
 
     display.setCursor(0, 56);
     display.print("Press any btn: Back");
+    display.display();
+}
+
+// ========================================= ANALYZE CONFIG HANDLERS ========================================
+void handleAnalyzeConfigToggleState() {
+    // UP/DOWN toggles staged mode
+    if (UP_Button.wasReleased() || Down_Button.wasReleased()) {
+        stagedAnalyzeEnabled = !stagedAnalyzeEnabled;
+        beep(100);
+    }
+
+    // MODE button advances
+    if (Mode_Button.wasReleased()) {
+        beep(300);
+        clearButtonStates();
+
+        if (stagedAnalyzeEnabled) {
+            // Go to Stage 1 configuration
+            currentState = STATE_ANALYZE_CONFIG_STAGE1;
+        } else {
+            // Start analyze with defaults (single-stage: 500mA, 3.0V cutoff)
+            stage1CurrentIndex = 6;  // 500mA
+            stage2FinalCutoff = 3.0;
+            analyzeDischargeStage = 1;
+            Capacity_f = 0;
+            dataLogger.reset();
+            startTime = millis();
+            lastCapacityUpdate = millis();
+            analogWrite(PWM_Pin, 0);
+            digitalWrite(Mosfet_Pin, HIGH);
+            currentState = STATE_ANALYZE_CHARGE;
+        }
+        return;
+    }
+
+    // Display
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(15, 0);
+    display.print("Analyze Config");
+    display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
+
+    display.setCursor(5, 18);
+    display.print("Staged Discharge:");
+
+    display.setTextSize(2);
+    display.setCursor(40, 32);
+    display.print(stagedAnalyzeEnabled ? "ON" : "OFF");
+
+    display.setTextSize(1);
+    display.setCursor(0, 56);
+    display.print("UP/DN:Toggle MODE:OK");
+    display.display();
+}
+
+void handleAnalyzeConfigStage1State() {
+    static int configField = 0;  // 0 = current, 1 = transition voltage
+
+    if (UP_Button.wasReleased()) {
+        beep(100);
+        if (configField == 0) {
+            // Increase current (move up in array)
+            if (stage1CurrentIndex < Array_Size - 1) {
+                stage1CurrentIndex++;
+            }
+        } else {
+            // Increase transition voltage (max 4.0V)
+            if (stage1TransitionVoltage < 4.0) {
+                stage1TransitionVoltage += 0.1;
+            }
+        }
+    }
+
+    if (Down_Button.wasReleased()) {
+        beep(100);
+        if (configField == 0) {
+            // Decrease current (min 50mA)
+            if (stage1CurrentIndex > 1) {
+                stage1CurrentIndex--;
+            }
+        } else {
+            // Decrease transition voltage (min must be > stage2FinalCutoff)
+            if (stage1TransitionVoltage > stage2FinalCutoff + 0.1) {
+                stage1TransitionVoltage -= 0.1;
+            }
+        }
+    }
+
+    if (Mode_Button.wasReleased()) {
+        beep(300);
+        clearButtonStates();
+        if (configField == 0) {
+            configField = 1;  // Move to transition voltage
+        } else {
+            configField = 0;  // Reset for next time
+            // Ensure stage2 current doesn't exceed stage1
+            if (stage2CurrentIndex > stage1CurrentIndex) {
+                stage2CurrentIndex = stage1CurrentIndex;
+            }
+            currentState = STATE_ANALYZE_CONFIG_STAGE2;
+        }
+        return;
+    }
+
+    // Display - Stage 1 Configuration
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(20, 0);
+    display.print("Stage 1 Config");
+    display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
+
+    // Current selection
+    display.setCursor(5, 16);
+    display.print(configField == 0 ? ">" : " ");
+    display.print("Current: ");
+    display.print(Current[stage1CurrentIndex]);
+    display.print("mA");
+
+    // Transition voltage
+    display.setCursor(5, 28);
+    display.print(configField == 1 ? ">" : " ");
+    display.print("Trans V: ");
+    display.print(stage1TransitionVoltage, 1);
+    display.print("V");
+
+    // Visual separator
+    display.drawLine(0, 40, 128, 40, SSD1306_WHITE);
+
+    // Instructions
+    display.setCursor(5, 44);
+    display.print("UP/DN: Adjust value");
+    display.setCursor(5, 54);
+    display.print("MODE: ");
+    display.print(configField == 0 ? "Next field" : "Continue");
+
+    display.display();
+}
+
+void handleAnalyzeConfigStage2State() {
+    static int configField = 0;  // 0 = current, 1 = final cutoff
+
+    if (UP_Button.wasReleased()) {
+        beep(100);
+        if (configField == 0) {
+            // Increase current (but not above stage 1)
+            if (stage2CurrentIndex < stage1CurrentIndex) {
+                stage2CurrentIndex++;
+            }
+        } else {
+            // Increase final cutoff (max must be < transition voltage)
+            if (stage2FinalCutoff < stage1TransitionVoltage - 0.1) {
+                stage2FinalCutoff += 0.1;
+            }
+        }
+    }
+
+    if (Down_Button.wasReleased()) {
+        beep(100);
+        if (configField == 0) {
+            // Decrease current (min 50mA)
+            if (stage2CurrentIndex > 1) {
+                stage2CurrentIndex--;
+            }
+        } else {
+            // Decrease final cutoff (min 2.8V)
+            if (stage2FinalCutoff > Min_BAT_level) {
+                stage2FinalCutoff -= 0.1;
+            }
+        }
+    }
+
+    if (Mode_Button.wasReleased()) {
+        beep(300);
+        clearButtonStates();
+        if (configField == 0) {
+            configField = 1;  // Move to cutoff voltage
+        } else {
+            configField = 0;  // Reset for next time
+            // Start the analyze operation
+            analyzeDischargeStage = 1;
+            Capacity_f = 0;
+            dataLogger.reset();
+            startTime = millis();
+            lastCapacityUpdate = millis();
+            analogWrite(PWM_Pin, 0);
+            digitalWrite(Mosfet_Pin, HIGH);
+            currentState = STATE_ANALYZE_CHARGE;
+        }
+        return;
+    }
+
+    // Display - Stage 2 Configuration
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(20, 0);
+    display.print("Stage 2 Config");
+    display.drawLine(0, 10, 128, 10, SSD1306_WHITE);
+
+    // Current selection (with constraint indicator)
+    display.setCursor(5, 16);
+    display.print(configField == 0 ? ">" : " ");
+    display.print("Current: ");
+    display.print(Current[stage2CurrentIndex]);
+    display.print("mA");
+
+    // Final cutoff voltage
+    display.setCursor(5, 28);
+    display.print(configField == 1 ? ">" : " ");
+    display.print("Cutoff: ");
+    display.print(stage2FinalCutoff, 1);
+    display.print("V");
+
+    // Visual separator
+    display.drawLine(0, 40, 128, 40, SSD1306_WHITE);
+
+    // Instructions
+    display.setCursor(5, 44);
+    display.print("UP/DN: Adjust value");
+    display.setCursor(5, 54);
+    display.print("MODE: ");
+    display.print(configField == 0 ? "Next field" : "START");
+
     display.display();
 }
 
