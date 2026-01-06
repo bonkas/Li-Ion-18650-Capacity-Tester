@@ -487,7 +487,14 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
         function updateWifiStatus(data) {
             // Update AP info
-            document.getElementById('apInfo').textContent = data.ap_ssid + ' (' + data.ap_ip + ')';
+            const apInfo = document.getElementById('apInfo');
+            if (data.ap_enabled) {
+                apInfo.textContent = data.ap_ssid + ' (' + data.ap_ip + ')';
+                apInfo.style.color = '#4ecca3';
+            } else {
+                apInfo.textContent = 'Disabled (connected to network)';
+                apInfo.style.color = '#888';
+            }
 
             // Update STA info
             const staInfo = document.getElementById('staInfo');

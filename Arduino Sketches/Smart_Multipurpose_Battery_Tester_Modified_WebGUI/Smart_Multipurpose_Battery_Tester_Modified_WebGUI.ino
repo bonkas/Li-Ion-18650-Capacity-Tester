@@ -323,14 +323,25 @@ bool connectToSTAWiFi() {
 
     if (WiFi.status() == WL_CONNECTED) {
         sta_enabled = true;
-        wifiMode = CFG_WIFI_BOTH;
         Serial.print("Connected! STA IP: ");
         Serial.println(WiFi.localIP());
+
+        // Disable AP now that we're connected to a network
+        Serial.println("Disabling AP...");
+        WiFi.softAPdisconnect(true);
+        WiFi.mode(WIFI_STA);
+        wifiMode = CFG_WIFI_STA;
+        Serial.println("AP disabled, running in STA mode only");
+
         return true;
     } else {
         Serial.println("Connection failed");
-        // Stay in AP+STA mode but STA is disconnected
+        // Revert to AP-only mode
+        WiFi.mode(WIFI_AP);
+        WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+        WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
         sta_enabled = false;
+        wifiMode = CFG_WIFI_AP;
         return false;
     }
 }
@@ -341,9 +352,13 @@ void sendWiFiStatus() {
 
     StaticJsonDocument<256> doc;
     doc["type"] = "wifi_status";
+
+    // AP status
+    doc["ap_enabled"] = (wifiMode == CFG_WIFI_AP || wifiMode == CFG_WIFI_BOTH);
     doc["ap_ssid"] = AP_SSID;
     doc["ap_ip"] = WiFi.softAPIP().toString();
 
+    // STA status
     if (WiFi.status() == WL_CONNECTED) {
         doc["sta_connected"] = true;
         doc["sta_ssid"] = sta_ssid;
