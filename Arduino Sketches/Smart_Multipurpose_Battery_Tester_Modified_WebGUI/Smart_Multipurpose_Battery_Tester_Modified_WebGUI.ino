@@ -118,6 +118,8 @@ AsyncWebSocket ws(WEBSOCKET_PATH);
 // ========================================= FUNCTION DECLARATIONS ========================================
 void setupWiFi();
 void setupWebServer();
+bool connectToSTAWiFi();
+void sendWiFiStatus();
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 void sendStatusUpdate();
@@ -289,6 +291,74 @@ void setupWiFi() {
     Serial.println(WiFi.softAPIP());
 }
 
+// Connect to an existing WiFi network (STA mode)
+// Returns true if connection successful
+bool connectToSTAWiFi() {
+    if (sta_ssid.length() == 0) {
+        Serial.println("No SSID configured");
+        return false;
+    }
+
+    Serial.print("Connecting to WiFi: ");
+    Serial.println(sta_ssid);
+
+    // Switch to AP+STA mode to maintain AP while connecting
+    WiFi.mode(WIFI_AP_STA);
+
+    // Reconfigure AP (needed after mode change)
+    WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+    WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
+
+    // Start STA connection
+    WiFi.begin(sta_ssid.c_str(), sta_password.c_str());
+
+    // Wait for connection with timeout
+    unsigned long startAttempt = millis();
+    while (WiFi.status() != WL_CONNECTED &&
+           millis() - startAttempt < STA_CONNECT_TIMEOUT) {
+        delay(100);
+        Serial.print(".");
+    }
+    Serial.println();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        sta_enabled = true;
+        wifiMode = CFG_WIFI_BOTH;
+        Serial.print("Connected! STA IP: ");
+        Serial.println(WiFi.localIP());
+        return true;
+    } else {
+        Serial.println("Connection failed");
+        // Stay in AP+STA mode but STA is disconnected
+        sta_enabled = false;
+        return false;
+    }
+}
+
+// Send WiFi status to all connected WebSocket clients
+void sendWiFiStatus() {
+    if (ws.count() == 0) return;
+
+    StaticJsonDocument<256> doc;
+    doc["type"] = "wifi_status";
+    doc["ap_ssid"] = AP_SSID;
+    doc["ap_ip"] = WiFi.softAPIP().toString();
+
+    if (WiFi.status() == WL_CONNECTED) {
+        doc["sta_connected"] = true;
+        doc["sta_ssid"] = sta_ssid;
+        doc["sta_ip"] = WiFi.localIP().toString();
+    } else {
+        doc["sta_connected"] = false;
+        doc["sta_ssid"] = sta_ssid;
+        doc["sta_ip"] = "";
+    }
+
+    String output;
+    serializeJson(doc, output);
+    ws.textAll(output);
+}
+
 // ========================================= WEB SERVER SETUP ========================================
 void setupWebServer() {
     // WebSocket handler
@@ -310,8 +380,9 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
     switch (type) {
         case WS_EVT_CONNECT:
             Serial.printf("WebSocket client #%u connected\n", client->id());
-            // Send current status and history to new client
+            // Send current status, WiFi status, and history to new client
             sendStatusUpdate();
+            sendWiFiStatus();
             sendHistoryData(client);
             break;
         case WS_EVT_DISCONNECT:
@@ -464,8 +535,26 @@ void processCommand(JsonDocument& doc) {
     else if (strcmp(cmd, "wifi_config") == 0) {
         sta_ssid = doc["ssid"].as<String>();
         sta_password = doc["password"].as<String>();
-        sta_enabled = true;
-        // Could add STA connection logic here
+
+        // Attempt to connect
+        if (connectToSTAWiFi()) {
+            sendWiFiStatus();
+        } else {
+            sendError("WiFi connection failed");
+            sendWiFiStatus();
+        }
+    }
+    else if (strcmp(cmd, "wifi_disconnect") == 0) {
+        WiFi.disconnect();
+        sta_enabled = false;
+        WiFi.mode(WIFI_AP);
+        WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+        WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
+        wifiMode = CFG_WIFI_AP;
+        sendWiFiStatus();
+    }
+    else if (strcmp(cmd, "get_wifi_status") == 0) {
+        sendWiFiStatus();
     }
 }
 

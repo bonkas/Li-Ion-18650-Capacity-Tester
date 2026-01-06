@@ -317,6 +317,16 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
         <div class="card wifi-panel" id="wifiPanel">
             <div class="card-title">WiFi Configuration</div>
+            <div id="wifiStatus" style="margin-bottom: 15px; padding: 10px; background: #1a1a2e; border-radius: 5px;">
+                <div style="margin-bottom: 8px;">
+                    <span style="color: #888;">Access Point:</span>
+                    <span id="apInfo" style="color: #4ecca3;">--</span>
+                </div>
+                <div>
+                    <span style="color: #888;">Network:</span>
+                    <span id="staInfo" style="color: #888;">Not connected</span>
+                </div>
+            </div>
             <div class="input-group">
                 <label>Network Name (SSID)</label>
                 <input type="text" id="wifiSSID" placeholder="Enter WiFi name">
@@ -325,7 +335,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 <label>Password</label>
                 <input type="password" id="wifiPassword" placeholder="Enter password">
             </div>
-            <button class="submit-btn" onclick="saveWifiConfig()">Connect to Network</button>
+            <button class="submit-btn" onclick="saveWifiConfig()" id="wifiConnectBtn">Connect to Network</button>
+            <button class="submit-btn" onclick="disconnectWifi()" id="wifiDisconnectBtn" style="display:none; background:#e74c3c; margin-top:5px;">Disconnect from Network</button>
         </div>
     </div>
 
@@ -471,6 +482,30 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             else if (data.type === 'datapoint') addDataPoint(data);
             else if (data.type === 'history') loadHistory(data.points);
             else if (data.type === 'error') showError(data.message);
+            else if (data.type === 'wifi_status') updateWifiStatus(data);
+        }
+
+        function updateWifiStatus(data) {
+            // Update AP info
+            document.getElementById('apInfo').textContent = data.ap_ssid + ' (' + data.ap_ip + ')';
+
+            // Update STA info
+            const staInfo = document.getElementById('staInfo');
+            const disconnectBtn = document.getElementById('wifiDisconnectBtn');
+
+            if (data.sta_connected) {
+                staInfo.textContent = data.sta_ssid + ' (' + data.sta_ip + ')';
+                staInfo.style.color = '#2ecc71';
+                disconnectBtn.style.display = 'block';
+            } else {
+                if (data.sta_ssid) {
+                    staInfo.textContent = 'Not connected (last: ' + data.sta_ssid + ')';
+                } else {
+                    staInfo.textContent = 'Not connected';
+                }
+                staInfo.style.color = '#888';
+                disconnectBtn.style.display = 'none';
+            }
         }
 
         function showError(message) {
@@ -582,8 +617,21 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
         function saveWifiConfig() {
             const ssid = document.getElementById('wifiSSID').value;
             const password = document.getElementById('wifiPassword').value;
+
+            if (!ssid) {
+                alert('Please enter a network name (SSID)');
+                return;
+            }
+
+            // Show connecting status
+            document.getElementById('staInfo').textContent = 'Connecting to ' + ssid + '...';
+            document.getElementById('staInfo').style.color = '#f39c12';
+
             sendCommand({ cmd: 'wifi_config', ssid: ssid, password: password });
-            alert('WiFi configuration sent.');
+        }
+
+        function disconnectWifi() {
+            sendCommand({ cmd: 'wifi_disconnect' });
         }
 
         window.addEventListener('load', function() {
