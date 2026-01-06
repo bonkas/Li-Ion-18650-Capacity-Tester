@@ -59,6 +59,7 @@ The Web GUI version adds a complete web-based interface for monitoring and contr
 | **IR Test Results** | Internal resistance displayed in web interface (persists until next operation) |
 | **Error Feedback** | Clear error messages when operations fail (no battery, damaged battery, etc.) |
 | **WiFi Configuration** | Connect to existing WiFi networks through the web interface |
+| **Auto-Reconnect** | Remembers last WiFi network and auto-connects on boot |
 
 ### WiFi Connectivity
 
@@ -76,6 +77,9 @@ The Web GUI version supports two WiFi modes:
 - Device connects to your existing WiFi network
 - Access via the IP address assigned by your router
 - **AP auto-disable**: After connecting to a network, the device's AP remains active for 45 seconds (so you can see the new IP), then automatically disables
+- **Credential Storage**: WiFi credentials are saved to non-volatile storage (NVS) and persist across reboots
+- **Auto-Reconnect**: On boot, the device automatically attempts to connect to the last saved network
+- **Forget Network**: Use the "Forget Network" button in the web interface to clear saved credentials
 
 #### WiFi Info on OLED
 - Select **WiFi Info** from the main menu to view:
@@ -138,6 +142,9 @@ The discharge current range has been extended to support higher currents:
 | `clearButtonStates()` | Waits for all buttons to be released and clears pending events |
 | `resetToIdle()` | Safely turns off charging MOSFET and discharge load |
 | `checkAbort()` | Checks for MODE button press, resets hardware, returns abort status |
+| `saveWiFiCredentials()` | Saves SSID and password to ESP32 non-volatile storage |
+| `loadWiFiCredentials()` | Loads saved credentials from NVS on boot |
+| `clearWiFiCredentials()` | Clears saved WiFi credentials from NVS |
 
 ### Other Changes
 
@@ -243,6 +250,15 @@ The discharge current range has been extended to support higher currents:
 5. Connect your device to your home network
 6. Access the tester at the new IP address
 
+**Note**: Your WiFi credentials are automatically saved. On next power-up, the device will auto-connect to your network.
+
+#### Forgetting a Saved Network
+
+1. Open the WiFi panel in the web interface
+2. Click **Forget Network (Clear Saved)**
+3. Confirm the action when prompted
+4. The device will return to AP-only mode and won't auto-connect on next boot
+
 ---
 
 ## Calibration
@@ -276,6 +292,7 @@ float Vref_Voltage = 1.26;  // Adjust for calibration
 ### Additional Dependencies (Web GUI Version)
 
 - `WiFi.h` - ESP32 WiFi library (included with ESP32 board package)
+- `Preferences.h` - ESP32 NVS storage library (included with ESP32 board package)
 - `ESPAsyncWebServer.h` - [Async Web Server](https://github.com/me-no-dev/ESPAsyncWebServer)
 - `ArduinoJson.h` - [ArduinoJson](https://github.com/bblanchon/ArduinoJson)
 
