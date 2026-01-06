@@ -342,6 +342,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             </div>
             <button class="submit-btn" onclick="saveWifiConfig()" id="wifiConnectBtn">Connect to Network</button>
             <button class="submit-btn" onclick="disconnectWifi()" id="wifiDisconnectBtn" style="display:none; background:#e74c3c; margin-top:5px;">Disconnect from Network</button>
+            <button class="submit-btn" onclick="forgetWifi()" id="wifiForgetBtn" style="display:none; background:#95a5a6; margin-top:5px;">Forget Network (Clear Saved)</button>
         </div>
     </div>
 
@@ -509,16 +510,20 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             // Update STA info
             const staInfo = document.getElementById('staInfo');
             const disconnectBtn = document.getElementById('wifiDisconnectBtn');
+            const forgetBtn = document.getElementById('wifiForgetBtn');
 
             if (data.sta_connected) {
                 staInfo.textContent = data.sta_ssid + ' (' + data.sta_ip + ')';
                 staInfo.style.color = '#2ecc71';
                 disconnectBtn.style.display = 'block';
+                forgetBtn.style.display = 'block';
             } else {
                 if (data.sta_ssid) {
-                    staInfo.textContent = 'Not connected (last: ' + data.sta_ssid + ')';
+                    staInfo.textContent = 'Not connected (saved: ' + data.sta_ssid + ')';
+                    forgetBtn.style.display = 'block';  // Show forget btn if credentials are saved
                 } else {
                     staInfo.textContent = 'Not connected';
+                    forgetBtn.style.display = 'none';
                 }
                 staInfo.style.color = '#888';
                 disconnectBtn.style.display = 'none';
@@ -649,6 +654,12 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
         function disconnectWifi() {
             sendCommand({ cmd: 'wifi_disconnect' });
+        }
+
+        function forgetWifi() {
+            if (confirm('Clear saved WiFi credentials? The device will no longer auto-connect to this network on boot.')) {
+                sendCommand({ cmd: 'wifi_forget' });
+            }
         }
 
         function checkHighCurrent() {

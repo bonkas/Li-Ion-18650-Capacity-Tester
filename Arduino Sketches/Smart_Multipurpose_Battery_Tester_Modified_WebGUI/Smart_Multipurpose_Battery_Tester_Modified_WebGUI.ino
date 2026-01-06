@@ -12,6 +12,7 @@
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
+#include <Preferences.h>
 
 // Include our header files
 #include "WiFiConfig.h"
@@ -122,11 +123,20 @@ int selectedMode = 0;
 AsyncWebServer server(WEB_SERVER_PORT);
 AsyncWebSocket ws(WEBSOCKET_PATH);
 
+// ========================================= PREFERENCES (NVS) ========================================
+Preferences preferences;
+const char* PREF_NAMESPACE = "wifi";
+const char* PREF_SSID = "ssid";
+const char* PREF_PASS = "password";
+
 // ========================================= FUNCTION DECLARATIONS ========================================
 void setupWiFi();
 void setupWebServer();
 bool connectToSTAWiFi();
 void sendWiFiStatus();
+void saveWiFiCredentials();
+bool loadWiFiCredentials();
+void clearWiFiCredentials();
 void handleWebSocketMessage(void *arg, uint8_t *data, size_t len);
 void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventType type, void *arg, uint8_t *data, size_t len);
 void sendStatusUpdate();
@@ -317,6 +327,16 @@ void setupWiFi() {
 
     Serial.print("AP IP address: ");
     Serial.println(WiFi.softAPIP());
+
+    // Check for saved WiFi credentials and attempt auto-connect
+    if (loadWiFiCredentials()) {
+        Serial.println("Attempting auto-connect to saved network...");
+        if (connectToSTAWiFi()) {
+            Serial.println("Auto-connect successful!");
+        } else {
+            Serial.println("Auto-connect failed, continuing in AP mode");
+        }
+    }
 }
 
 // Connect to an existing WiFi network (STA mode)
@@ -354,6 +374,9 @@ bool connectToSTAWiFi() {
         wifiMode = CFG_WIFI_BOTH;
         Serial.print("Connected! STA IP: ");
         Serial.println(WiFi.localIP());
+
+        // Save credentials for auto-reconnect on next boot
+        saveWiFiCredentials();
 
         // Schedule AP to be disabled after delay (so user can see new IP)
         apDisableTime = millis() + AP_DISABLE_DELAY;
@@ -407,6 +430,42 @@ void sendWiFiStatus() {
     String output;
     serializeJson(doc, output);
     ws.textAll(output);
+}
+
+// Save WiFi credentials to non-volatile storage
+void saveWiFiCredentials() {
+    preferences.begin(PREF_NAMESPACE, false);
+    preferences.putString(PREF_SSID, sta_ssid);
+    preferences.putString(PREF_PASS, sta_password);
+    preferences.end();
+    Serial.println("WiFi credentials saved to NVS");
+}
+
+// Load WiFi credentials from non-volatile storage
+// Returns true if credentials were found
+bool loadWiFiCredentials() {
+    preferences.begin(PREF_NAMESPACE, true);
+    sta_ssid = preferences.getString(PREF_SSID, "");
+    sta_password = preferences.getString(PREF_PASS, "");
+    preferences.end();
+
+    if (sta_ssid.length() > 0) {
+        Serial.print("Loaded saved WiFi credentials for: ");
+        Serial.println(sta_ssid);
+        return true;
+    }
+    Serial.println("No saved WiFi credentials found");
+    return false;
+}
+
+// Clear saved WiFi credentials from non-volatile storage
+void clearWiFiCredentials() {
+    preferences.begin(PREF_NAMESPACE, false);
+    preferences.clear();
+    preferences.end();
+    sta_ssid = "";
+    sta_password = "";
+    Serial.println("WiFi credentials cleared from NVS");
 }
 
 // ========================================= WEB SERVER SETUP ========================================
@@ -600,6 +659,18 @@ void processCommand(JsonDocument& doc) {
         WiFi.disconnect();
         sta_enabled = false;
         apDisablePending = false;  // Cancel any pending AP disable
+        WiFi.mode(WIFI_AP);
+        WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+        WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
+        wifiMode = CFG_WIFI_AP;
+        sendWiFiStatus();
+    }
+    else if (strcmp(cmd, "wifi_forget") == 0) {
+        // Disconnect and clear saved credentials
+        WiFi.disconnect();
+        sta_enabled = false;
+        apDisablePending = false;
+        clearWiFiCredentials();
         WiFi.mode(WIFI_AP);
         WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
         WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
