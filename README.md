@@ -27,7 +27,7 @@ This repository contains three versions of the firmware:
 |------|-------------|
 | **Charge** | Charges battery to 4.18V using the LP4060 charging IC |
 | **Discharge** | Discharges battery at selectable current (0-2000mA) to measure capacity |
-| **Analyze** | Full cycle: charge to full, rest, then discharge to measure true capacity |
+| **Analyze** | Full cycle: charge to full, rest, then discharge to measure true capacity. Supports optional staged discharge with different currents. |
 | **IR Test** | Measures internal resistance using voltage drop under load |
 | **WiFi Info** | Displays current WiFi connection status and IP addresses (Web GUI version) |
 
@@ -56,6 +56,7 @@ The Web GUI version adds a complete web-based interface for monitoring and contr
 | **Remote Control** | Start/Stop operations from any device on the network |
 | **Mode Selection** | Select Charge, Discharge, Analyze, or IR Test from the web |
 | **Discharge Settings** | Configure cutoff voltage and discharge current via web UI |
+| **Staged Analyze** | Optional two-stage discharge with configurable transition voltage and currents |
 | **IR Test Results** | Internal resistance displayed in web interface (persists until next operation) |
 | **Error Feedback** | Clear error messages when operations fail (no battery, damaged battery, etc.) |
 | **WiFi Configuration** | Connect to existing WiFi networks through the web interface |
@@ -208,12 +209,33 @@ The discharge current range has been extended to support higher currents:
 ### Analyze Mode
 
 1. Select **Analyze** from the main menu
-2. The tester will:
+2. Choose between **Standard** or **Staged Discharge** mode:
+   - **Standard**: Single discharge current throughout
+   - **Staged**: Two-stage discharge with different currents
+3. For **Staged Discharge**, configure:
+   - **Stage 1**: Current and transition voltage (when to switch to Stage 2)
+   - **Stage 2**: Current (must be ≤ Stage 1) and final cutoff voltage
+4. The tester will:
    - Charge the battery to full (4.18V)
    - Rest for 3 minutes to stabilize
-   - Discharge at 500mA to 3.0V cutoff
-3. Final capacity is displayed in mAh
-4. Press MODE at any time to abort
+   - Discharge to the configured cutoff voltage (with stage transition if enabled)
+5. Final capacity is displayed in mAh
+6. A beep indicates stage transition during staged discharge
+7. Press MODE at any time to abort
+
+#### Staged Discharge Benefits
+
+Staged discharge allows more accurate capacity measurement by:
+- Using higher current initially when voltage is stable
+- Switching to lower current near the cutoff where voltage drops more rapidly
+- Reducing measurement error from internal resistance effects at low voltages
+
+| Parameter | Default | Range |
+|-----------|---------|-------|
+| Stage 1 Current | 500mA | 100-2000mA |
+| Transition Voltage | 3.3V | Must be > final cutoff |
+| Stage 2 Current | 300mA | 100mA - Stage 1 current |
+| Final Cutoff | 3.0V | 2.8V - 3.2V |
 
 ### IR Test Mode
 
