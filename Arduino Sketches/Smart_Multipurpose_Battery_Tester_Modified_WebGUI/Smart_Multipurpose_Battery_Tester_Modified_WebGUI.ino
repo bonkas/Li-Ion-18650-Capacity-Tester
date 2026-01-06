@@ -123,6 +123,7 @@ void onWsEvent(AsyncWebSocket *server, AsyncWebSocketClient *client, AwsEventTyp
 void sendStatusUpdate();
 void sendDataPoint();
 void sendHistoryData(AsyncWebSocketClient *client);
+void sendError(const char* message);
 void processCommand(JsonDocument& doc);
 
 void readButtons();
@@ -345,68 +346,113 @@ void processCommand(JsonDocument& doc) {
     if (!cmd) return;
 
     if (strcmp(cmd, "start_charge") == 0) {
-        if (currentState == STATE_MENU) {
-            // Check battery first
-            BAT_Voltage = measureBatteryVoltage();
-            if (BAT_Voltage < NO_BAT_level) {
-                // No battery - stay in menu
-                return;
-            }
-            Capacity_f = 0;
-            dataLogger.reset();
-            startTime = millis();
-            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
-            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
-            currentState = STATE_CHARGING;
-            beep(100);
+        if (currentState != STATE_MENU) {
+            sendError("Operation already in progress");
+            return;
         }
+        // Check battery first
+        BAT_Voltage = measureBatteryVoltage();
+        if (BAT_Voltage < NO_BAT_level) {
+            sendError("No battery detected");
+            return;
+        }
+        if (BAT_Voltage < DAMAGE_BAT_level) {
+            sendError("Battery damaged (below 2.5V)");
+            return;
+        }
+        if (BAT_Voltage >= FULL_BAT_level) {
+            sendError("Battery already full");
+            return;
+        }
+        Capacity_f = 0;
+        dataLogger.reset();
+        startTime = millis();
+        analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
+        digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
+        currentState = STATE_CHARGING;
+        beep(100);
     }
     else if (strcmp(cmd, "start_discharge") == 0) {
-        if (currentState == STATE_MENU) {
-            cutoffVoltage = doc["cutoff"] | 3.0;
-            int reqCurrent = doc["current"] | 500;
-            // Find matching PWM index
-            PWM_Index = 6; // Default 500mA
-            for (int i = 0; i < Array_Size; i++) {
-                if (Current[i] == reqCurrent) {
-                    PWM_Index = i;
-                    break;
-                }
-            }
-            PWM_Value = PWM[PWM_Index];
-            Capacity_f = 0;
-            dataLogger.reset();
-            startTime = millis();
-            lastCapacityUpdate = millis();
-            digitalWrite(Mosfet_Pin, LOW);
-            analogWrite(PWM_Pin, PWM_Value);
-            currentState = STATE_DISCHARGING;
-            beep(100);
+        if (currentState != STATE_MENU) {
+            sendError("Operation already in progress");
+            return;
         }
+        // Check battery first
+        BAT_Voltage = measureBatteryVoltage();
+        if (BAT_Voltage < NO_BAT_level) {
+            sendError("No battery detected");
+            return;
+        }
+        if (BAT_Voltage < DAMAGE_BAT_level) {
+            sendError("Battery damaged (below 2.5V)");
+            return;
+        }
+        cutoffVoltage = doc["cutoff"] | 3.0;
+        int reqCurrent = doc["current"] | 500;
+        // Check if battery is already below cutoff
+        if (BAT_Voltage <= cutoffVoltage) {
+            sendError("Battery already below cutoff voltage");
+            return;
+        }
+        // Find matching PWM index
+        PWM_Index = 6; // Default 500mA
+        for (int i = 0; i < Array_Size; i++) {
+            if (Current[i] == reqCurrent) {
+                PWM_Index = i;
+                break;
+            }
+        }
+        PWM_Value = PWM[PWM_Index];
+        Capacity_f = 0;
+        dataLogger.reset();
+        startTime = millis();
+        lastCapacityUpdate = millis();
+        digitalWrite(Mosfet_Pin, LOW);
+        analogWrite(PWM_Pin, PWM_Value);
+        currentState = STATE_DISCHARGING;
+        beep(100);
     }
     else if (strcmp(cmd, "start_analyze") == 0) {
-        if (currentState == STATE_MENU) {
-            BAT_Voltage = measureBatteryVoltage();
-            if (BAT_Voltage < NO_BAT_level) {
-                return;
-            }
-            Capacity_f = 0;
-            dataLogger.reset();
-            startTime = millis();
-            analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
-            digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
-            currentState = STATE_ANALYZE_CHARGE;
-            beep(100);
+        if (currentState != STATE_MENU) {
+            sendError("Operation already in progress");
+            return;
         }
+        BAT_Voltage = measureBatteryVoltage();
+        if (BAT_Voltage < NO_BAT_level) {
+            sendError("No battery detected");
+            return;
+        }
+        if (BAT_Voltage < DAMAGE_BAT_level) {
+            sendError("Battery damaged (below 2.5V)");
+            return;
+        }
+        Capacity_f = 0;
+        dataLogger.reset();
+        startTime = millis();
+        analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
+        digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
+        currentState = STATE_ANALYZE_CHARGE;
+        beep(100);
     }
     else if (strcmp(cmd, "start_ir") == 0) {
-        if (currentState == STATE_MENU) {
-            stateStartTime = millis();
-            analogWrite(PWM_Pin, 0);
-            digitalWrite(Mosfet_Pin, LOW);
-            currentState = STATE_IR_MEASURE;
-            beep(100);
+        if (currentState != STATE_MENU) {
+            sendError("Operation already in progress");
+            return;
         }
+        BAT_Voltage = measureBatteryVoltage();
+        if (BAT_Voltage < NO_BAT_level) {
+            sendError("No battery detected");
+            return;
+        }
+        if (BAT_Voltage < DAMAGE_BAT_level) {
+            sendError("Battery damaged (below 2.5V)");
+            return;
+        }
+        stateStartTime = millis();
+        analogWrite(PWM_Pin, 0);
+        digitalWrite(Mosfet_Pin, LOW);
+        currentState = STATE_IR_MEASURE;
+        beep(100);
     }
     else if (strcmp(cmd, "abort") == 0) {
         resetToIdle();
@@ -497,6 +543,18 @@ void sendHistoryData(AsyncWebSocketClient *client) {
     String output;
     serializeJson(doc, output);
     client->text(output);
+}
+
+void sendError(const char* message) {
+    if (ws.count() == 0) return;
+
+    StaticJsonDocument<128> doc;
+    doc["type"] = "error";
+    doc["message"] = message;
+
+    String output;
+    serializeJson(doc, output);
+    ws.textAll(output);
 }
 
 // ========================================= BUTTON HANDLING ========================================

@@ -465,6 +465,17 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             if (data.type === 'status') updateStatus(data);
             else if (data.type === 'datapoint') addDataPoint(data);
             else if (data.type === 'history') loadHistory(data.points);
+            else if (data.type === 'error') showError(data.message);
+        }
+
+        function showError(message) {
+            // Update status display to show error
+            document.getElementById('currentState').textContent = message;
+            document.getElementById('currentState').style.color = '#e74c3c';
+            // Reset color after 3 seconds
+            setTimeout(() => {
+                document.getElementById('currentState').style.color = '#888';
+            }, 3000);
         }
 
         function updateStatus(data) {
@@ -499,12 +510,13 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
             // Show active mode from device
             document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
-            if (data.mode.includes('charge') && !data.mode.includes('discharge')) {
-                document.getElementById('btnCharge').classList.add('active');
-            } else if (data.mode.includes('discharge')) {
-                document.getElementById('btnDischarge').classList.add('active');
-            } else if (data.mode.includes('analyze')) {
+            // Check analyze first since analyze_charge/analyze_discharge contain those words
+            if (data.mode.startsWith('analyze')) {
                 document.getElementById('btnAnalyze').classList.add('active');
+            } else if (data.mode === 'charge') {
+                document.getElementById('btnCharge').classList.add('active');
+            } else if (data.mode === 'discharge') {
+                document.getElementById('btnDischarge').classList.add('active');
             } else if (data.mode === 'ir') {
                 document.getElementById('btnIR').classList.add('active');
             }
