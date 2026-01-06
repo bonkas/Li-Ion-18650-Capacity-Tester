@@ -488,6 +488,7 @@ void processCommand(JsonDocument& doc) {
         Capacity_f = 0;
         dataLogger.reset();
         startTime = millis();
+        lastCapacityUpdate = millis();
         analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
         digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
         currentState = STATE_CHARGING;
@@ -550,6 +551,7 @@ void processCommand(JsonDocument& doc) {
         Capacity_f = 0;
         dataLogger.reset();
         startTime = millis();
+        lastCapacityUpdate = millis();
         analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
         digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
         currentState = STATE_ANALYZE_CHARGE;
@@ -821,6 +823,7 @@ void handleMenuState() {
             Capacity_f = 0;
             dataLogger.reset();
             startTime = millis();
+            lastCapacityUpdate = millis();
             analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
             digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
             currentState = STATE_CHARGING;
@@ -843,6 +846,7 @@ void handleMenuState() {
             Capacity_f = 0;
             dataLogger.reset();
             startTime = millis();
+            lastCapacityUpdate = millis();
             analogWrite(PWM_Pin, 0);        // Ensure discharge load is OFF
             digitalWrite(Mosfet_Pin, HIGH); // Enable charging circuit
             currentState = STATE_ANALYZE_CHARGE;
@@ -960,7 +964,14 @@ void handleChargingState() {
     updateTiming();
     BAT_Voltage = measureBatteryVoltage();
 
-    // Log data with actual charge current from LP4060
+    // Calculate estimated capacity (using known charge current from LP4060)
+    // Note: This is an estimate - actual current tapers during CV phase
+    unsigned long currentTime = millis();
+    float elapsedTimeInHours = (currentTime - lastCapacityUpdate) / 3600000.0;
+    Capacity_f += CHARGE_CURRENT_MA * elapsedTimeInHours;
+    lastCapacityUpdate = currentTime;
+
+    // Log data
     dataLogger.addDataPoint(BAT_Voltage, getCurrentMA(), Capacity_f);
 
     // Check if charging complete
@@ -975,16 +986,21 @@ void handleChargingState() {
     display.clearDisplay();
     updateBatteryDisplay(true);
     display.setTextSize(1);
-    display.setCursor(25, 5);
+    display.setCursor(5, 5);
     display.print("Charging..");
-    display.setCursor(40, 25);
+    display.setCursor(5, 18);
+    display.print("Time:");
     display.print(Hour);
     display.print(":");
     display.print(Minute);
     display.print(":");
     display.print(Second);
+    display.setCursor(5, 31);
+    display.print("~Cap:");
+    display.print(Capacity_f, 0);
+    display.print("mAh");
+    display.setCursor(5, 48);
     display.setTextSize(2);
-    display.setCursor(15, 40);
     display.print("V:");
     display.print(BAT_Voltage, 2);
     display.print("V");
@@ -1066,7 +1082,13 @@ void handleAnalyzeChargeState() {
     updateTiming();
     BAT_Voltage = measureBatteryVoltage();
 
-    // Log data with actual charge current from LP4060
+    // Calculate estimated capacity during charge phase
+    unsigned long currentTime = millis();
+    float elapsedTimeInHours = (currentTime - lastCapacityUpdate) / 3600000.0;
+    Capacity_f += CHARGE_CURRENT_MA * elapsedTimeInHours;
+    lastCapacityUpdate = currentTime;
+
+    // Log data
     dataLogger.addDataPoint(BAT_Voltage, getCurrentMA(), Capacity_f);
 
     // Check if charging complete
@@ -1081,16 +1103,21 @@ void handleAnalyzeChargeState() {
     display.clearDisplay();
     updateBatteryDisplay(true);
     display.setTextSize(1);
-    display.setCursor(10, 5);
-    display.print("Analyzing - C");
-    display.setCursor(40, 25);
+    display.setCursor(5, 5);
+    display.print("Analyze - Charging");
+    display.setCursor(5, 18);
+    display.print("Time:");
     display.print(Hour);
     display.print(":");
     display.print(Minute);
     display.print(":");
     display.print(Second);
+    display.setCursor(5, 31);
+    display.print("~Cap:");
+    display.print(Capacity_f, 0);
+    display.print("mAh");
+    display.setCursor(5, 48);
     display.setTextSize(2);
-    display.setCursor(15, 40);
     display.print("V:");
     display.print(BAT_Voltage, 2);
     display.print("V");
