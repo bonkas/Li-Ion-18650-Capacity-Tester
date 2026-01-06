@@ -489,8 +489,13 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             // Update AP info
             const apInfo = document.getElementById('apInfo');
             if (data.ap_enabled) {
-                apInfo.textContent = data.ap_ssid + ' (' + data.ap_ip + ')';
-                apInfo.style.color = '#4ecca3';
+                if (data.ap_disable_in !== undefined && data.ap_disable_in > 0) {
+                    apInfo.textContent = data.ap_ssid + ' (' + data.ap_ip + ') - Disabling in ' + data.ap_disable_in + 's';
+                    apInfo.style.color = '#f39c12';
+                } else {
+                    apInfo.textContent = data.ap_ssid + ' (' + data.ap_ip + ')';
+                    apInfo.style.color = '#4ecca3';
+                }
             } else {
                 apInfo.textContent = 'Disabled (connected to network)';
                 apInfo.style.color = '#888';

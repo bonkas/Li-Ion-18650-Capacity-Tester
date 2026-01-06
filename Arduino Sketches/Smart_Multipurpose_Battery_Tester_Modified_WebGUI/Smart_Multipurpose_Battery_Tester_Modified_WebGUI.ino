@@ -85,6 +85,11 @@ unsigned long lastWsUpdate = 0;
 unsigned long stateStartTime = 0;
 unsigned long restStartTime = 0;
 
+// AP disable timer - keep AP on for a period after STA connection so user can see new IP
+unsigned long apDisableTime = 0;
+const unsigned long AP_DISABLE_DELAY = 45000;  // 45 seconds before disabling AP
+bool apDisablePending = false;
+
 int Hour = 0;
 int Minute = 0;
 int Second = 0;
@@ -263,7 +268,24 @@ void loop() {
     // Send WebSocket updates periodically
     if (millis() - lastWsUpdate > 1000) {
         sendStatusUpdate();
+        // Also send WiFi status if AP disable is pending (for countdown)
+        if (apDisablePending) {
+            sendWiFiStatus();
+        }
         lastWsUpdate = millis();
+    }
+
+    // Check if it's time to disable AP after STA connection
+    if (apDisablePending && millis() >= apDisableTime) {
+        if (WiFi.status() == WL_CONNECTED) {
+            Serial.println("Disabling AP after delay...");
+            WiFi.softAPdisconnect(true);
+            WiFi.mode(WIFI_STA);
+            wifiMode = CFG_WIFI_STA;
+            Serial.println("AP disabled, running in STA mode only");
+            sendWiFiStatus();  // Notify clients of the change
+        }
+        apDisablePending = false;
     }
 }
 
@@ -323,15 +345,14 @@ bool connectToSTAWiFi() {
 
     if (WiFi.status() == WL_CONNECTED) {
         sta_enabled = true;
+        wifiMode = CFG_WIFI_BOTH;
         Serial.print("Connected! STA IP: ");
         Serial.println(WiFi.localIP());
 
-        // Disable AP now that we're connected to a network
-        Serial.println("Disabling AP...");
-        WiFi.softAPdisconnect(true);
-        WiFi.mode(WIFI_STA);
-        wifiMode = CFG_WIFI_STA;
-        Serial.println("AP disabled, running in STA mode only");
+        // Schedule AP to be disabled after delay (so user can see new IP)
+        apDisableTime = millis() + AP_DISABLE_DELAY;
+        apDisablePending = true;
+        Serial.printf("AP will be disabled in %lu seconds\n", AP_DISABLE_DELAY / 1000);
 
         return true;
     } else {
@@ -342,6 +363,7 @@ bool connectToSTAWiFi() {
         WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
         sta_enabled = false;
         wifiMode = CFG_WIFI_AP;
+        apDisablePending = false;
         return false;
     }
 }
@@ -354,9 +376,16 @@ void sendWiFiStatus() {
     doc["type"] = "wifi_status";
 
     // AP status
-    doc["ap_enabled"] = (wifiMode == CFG_WIFI_AP || wifiMode == CFG_WIFI_BOTH);
+    bool apEnabled = (wifiMode == CFG_WIFI_AP || wifiMode == CFG_WIFI_BOTH);
+    doc["ap_enabled"] = apEnabled;
     doc["ap_ssid"] = AP_SSID;
     doc["ap_ip"] = WiFi.softAPIP().toString();
+
+    // Show countdown if AP disable is pending
+    if (apDisablePending && apEnabled) {
+        unsigned long remaining = (apDisableTime > millis()) ? (apDisableTime - millis()) / 1000 : 0;
+        doc["ap_disable_in"] = remaining;
+    }
 
     // STA status
     if (WiFi.status() == WL_CONNECTED) {
@@ -562,6 +591,7 @@ void processCommand(JsonDocument& doc) {
     else if (strcmp(cmd, "wifi_disconnect") == 0) {
         WiFi.disconnect();
         sta_enabled = false;
+        apDisablePending = false;  // Cancel any pending AP disable
         WiFi.mode(WIFI_AP);
         WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
         WiFi.softAP(AP_SSID, AP_PASSWORD, AP_CHANNEL, false, AP_MAX_CONNECTIONS);
