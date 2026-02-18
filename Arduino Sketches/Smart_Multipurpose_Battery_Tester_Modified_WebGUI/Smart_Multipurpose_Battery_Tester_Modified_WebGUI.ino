@@ -94,9 +94,10 @@ enum DeviceState {
 
 DeviceState currentState = STATE_MENU;
 DeviceState previousState = STATE_IDLE;
+bool abortRequested = false;  // Flag for abort requests from web GUI
 
 // ========================================= BATTERY SETTINGS ========================================
-float cutoffVoltage = 3.0;
+float cutoffVoltage = 3.0;  // Default discharge cutoff voltage
 const float Min_BAT_level = 2.8;
 const float Max_BAT_level = 3.2;
 const float FULL_BAT_level = 4.18;
@@ -818,6 +819,7 @@ void processCommand(JsonDocument& doc) {
         beep(100);
     }
     else if (strcmp(cmd, "abort") == 0) {
+        abortRequested = true;  // Set flag so current handler can process abort
         resetToIdle();
         beep(100);
         delay(100);
@@ -885,6 +887,8 @@ void sendStatusUpdate() {
             break;
         case STATE_IR_MEASURE:
         case STATE_IR_DISPLAY: doc["mode"] = "ir"; break;
+        case STATE_BATTERY_CHECK: doc["mode"] = "batcheck"; break;
+        case STATE_STORAGE_PREP: doc["mode"] = "storage"; break;
         case STATE_COMPLETE: doc["mode"] = "complete"; break;
         default: doc["mode"] = "idle"; break;
     }
@@ -1720,8 +1724,9 @@ void handleCompleteState() {
         chimePlayedComplete = true;
     }
 
-    // Reset flag when leaving this state
-    if (Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+    // Reset flag when leaving this state (respond to buttons or abort command)
+    if (abortRequested || Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+        abortRequested = false;
         chimePlayedComplete = false;
         currentState = STATE_MENU;
         return;
@@ -1804,8 +1809,9 @@ void handleWiFiInfoState() {
 
 // ========================================= BATTERY CHECK HANDLER ========================================
 void handleBatteryCheckState() {
-    // Return to menu on any button press or abort command
-    if (Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+    // Return to menu on any button press or abort request
+    if (abortRequested || Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+        abortRequested = false;
         currentState = STATE_MENU;
         return;
     }
@@ -1851,8 +1857,9 @@ void handleBatteryCheckState() {
 
 // ========================================= STORAGE PREP HANDLER ========================================
 void handleStoragePrepState() {
-    // Check for abort
-    if (Mode_Button.wasReleased()) {
+    // Check for abort from web GUI or MODE button
+    if (abortRequested || Mode_Button.wasReleased()) {
+        abortRequested = false;
         resetToIdle();
         beep(100);
         delay(100);
