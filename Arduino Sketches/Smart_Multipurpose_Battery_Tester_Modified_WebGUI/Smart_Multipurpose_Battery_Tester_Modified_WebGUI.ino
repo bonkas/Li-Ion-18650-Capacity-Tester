@@ -232,6 +232,10 @@ void setup() {
     UP_Button.begin();
     Down_Button.begin();
     Mode_Button.begin();
+    
+    // Clear any spurious button presses from initialization
+    delay(100);
+    clearButtonStates();
 
     // Initialize OLED
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
