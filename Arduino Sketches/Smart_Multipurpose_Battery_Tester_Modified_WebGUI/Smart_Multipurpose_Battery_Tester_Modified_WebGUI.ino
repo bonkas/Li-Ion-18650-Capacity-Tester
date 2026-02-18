@@ -820,11 +820,17 @@ void processCommand(JsonDocument& doc) {
     }
     else if (strcmp(cmd, "abort") == 0) {
         abortRequested = true;  // Set flag so current handler can process abort
-        resetToIdle();
-        beep(100);
-        delay(100);
-        beep(100);
-        currentState = STATE_MENU;
+        // For completion state, just set flag and let handler exit
+        if (currentState == STATE_COMPLETE) {
+            // Handler will check flag and exit cleanly
+        } else if (currentState != STATE_MENU && currentState != STATE_IDLE) {
+            // For active operations, reset hardware immediately
+            resetToIdle();
+            beep(100);
+            delay(100);
+            beep(100);
+            currentState = STATE_MENU;
+        }
     }
     else if (strcmp(cmd, "wifi_config") == 0) {
         sta_ssid = doc["ssid"].as<String>();
@@ -893,7 +899,7 @@ void sendStatusUpdate() {
         default: doc["mode"] = "idle"; break;
     }
 
-    doc["status"] = (currentState != STATE_MENU && currentState != STATE_COMPLETE) ? "Running" : "Ready";
+    doc["status"] = (currentState != STATE_MENU) ? "Running" : "Ready";
     doc["voltage"] = BAT_Voltage;
     doc["current"] = getCurrentMA();
     doc["capacity"] = Capacity_f;
@@ -1843,10 +1849,17 @@ void handleBatteryCheckState() {
         display.print("Status: Very Low");
     }
 
-    // Display charge percentage
+    // Display charge percentage with bar graph
     int batteryPercent = constrain((BAT_Voltage - Min_BAT_level) / (FULL_BAT_level - Min_BAT_level) * 100, 0, 100);
+    
+    // Draw battery level bar
+    int barWidth = (batteryPercent / 100.0) * 70;
     display.setCursor(0, 38);
-    display.print("Charge: ");
+    display.print("[");
+    display.fillRect(10, 39, constrain(barWidth, 0, 70), 6, WHITE);
+    display.drawRect(10, 39, 70, 6, WHITE);
+    display.setCursor(85, 38);
+    display.print("] ");
     display.print(batteryPercent);
     display.print("%");
 

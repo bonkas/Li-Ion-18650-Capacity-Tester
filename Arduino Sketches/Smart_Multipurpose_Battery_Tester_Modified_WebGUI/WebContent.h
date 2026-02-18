@@ -697,6 +697,12 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             document.getElementById('capacity').textContent = data.capacity ? data.capacity.toFixed(1) : '0';
             document.getElementById('elapsed').textContent = data.time || '00:00:00';
 
+            // Hide non-essential stats for Battery Check and Storage modes
+            const isBatCheckOrStorage = data.mode === 'batcheck' || data.mode === 'storage';
+            document.getElementById('current').parentElement.style.display = isBatCheckOrStorage ? 'none' : 'block';
+            document.getElementById('capacity').parentElement.style.display = isBatCheckOrStorage ? 'none' : 'block';
+            document.getElementById('elapsed').parentElement.style.display = isBatCheckOrStorage ? 'none' : 'block';
+
             // Show IR result when available (persists until new operation starts)
             if (data.ir !== undefined) {
                 document.getElementById('irValue').textContent = data.ir.toFixed(0);
