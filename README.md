@@ -159,16 +159,16 @@ The discharge current range has been extended to support higher currents:
 
 ### Components
 
-| Component | Description |
-|-----------|-------------|
-| **Microcontroller** | XIAO ESP32C3 |
-| **Display** | 0.96" OLED 128x64 (I2C, address 0x3C) |
-| **Charger IC** | LP4060 (CC/CV charging) |
-| **Protection IC** | AP6685 |
-| **Op-Amp** | LMV321B |
-| **Load MOSFET** | IRL540 (with heatsink) |
-| **Voltage Reference** | LM385-1.2V |
-| **Power Input** | USB Type-C (5V) |
+| Component | Reference | Description |
+|-----------|-----------|-------------|
+| **Microcontroller** | - | XIAO ESP32C3 |
+| **Display** | - | 0.96" OLED 128x64 (I2C, address 0x3C) |
+| **Charger IC** | - | LP4060 (CC/CV charging) |
+| **Protection IC** | - | AP6685 |
+| **Op-Amp** | - | LMV321B |
+| **Load MOSFET** | - | IRL540 (with heatsink) |
+| **Voltage Reference** | U6 | LM385-1.2V |
+| **Power Input** | - | USB Type-C (5V) |
 
 ### Pin Configuration (XIAO ESP32C3)
 
@@ -285,11 +285,33 @@ Staged discharge allows more accurate capacity measurement by:
 
 ## Calibration
 
-The voltage reference can be calibrated by adjusting `Vref_Voltage` in the code (default: 1.26V for LM385-1.2V).
+### Voltage Reference Calibration
+
+The voltage reference can be calibrated by adjusting `Vref_Voltage` in the firmware (default: 1.26V for LM385-1.2V reference U6).
 
 ```cpp
-float Vref_Voltage = 1.26;  // Adjust for calibration
+float Vref_Voltage = 1.26;  // LM385-1.2V reference voltage ( adjust it for calibration, 1.227 default )
 ```
+
+### How to Calibrate
+
+1. **Establish baseline**: Note the current value (default: 1.26V)
+2. **Measure reference voltage**: Use a calibrated multimeter to check an actual battery voltage
+3. **Compare with device**: Discharge the same battery on the tester and note the voltage reading
+4. **Calculate correction factor**:
+   - If device reads **HIGH** compared to multimeter: decrease `Vref_Voltage`
+   - If device reads **LOW** compared to multimeter: increase `Vref_Voltage`
+5. **Apply proportional adjustment**:
+   - Example: If reading is 5% high, multiply by 0.95: `1.227 × 0.95 = 1.166`
+   - Recompile and test with another battery
+6. **Repeat** until readings match your reference multimeter (within ±2%)
+
+### Notes
+
+- The U6 component (LM385-1.2V) is the voltage reference IC used for ADC calibration
+- Factory default is typically 1.227V; adjusted to 1.26V for improved accuracy in this version
+- Small adjustments (±0.05V) will significantly affect readings
+- Use a fully charged battery (4.0V+) and a calibrated multimeter for best calibration results
 
 ## Voltage Thresholds
 

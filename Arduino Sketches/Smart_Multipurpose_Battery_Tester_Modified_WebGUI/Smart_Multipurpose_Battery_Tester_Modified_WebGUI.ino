@@ -5,6 +5,32 @@
 // https://www.instructables.com/DIY-Smart-Multipurpose-Battery-Tester/
 // modified by bonkas https://www.github.com/bonkas
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+//
+// CALIBRATION NOTE: Voltage Measurement Accuracy
+// ==================================================
+// The voltage reference (Vref_Voltage) can be adjusted to improve accuracy.
+// This constant represents the LM385-1.2V reference voltage (U6 on PCB).
+// Default value: 1.26V (factory default: 1.227V)
+//
+// How to calibrate:
+// 1. Set the constant to a known good value (start with 1.227)
+// 2. Measure a known battery voltage with this device
+// 3. Compare with a calibrated multimeter
+// 4. Adjust the constant proportionally:
+//    If reading is HIGH, decrease the value
+//    If reading is LOW, increase the value
+// 5. Example: If reading is 5% high, multiply 1.227 × 0.95 = 1.166
+//
+// HARDWARE NOTES:
+// ==================================================
+// - Only use with single-cell Li-Ion batteries (3.7V nominal, 4.2V max)
+// - High discharge currents (>1000mA): Ensure MOSFET has proper cooling
+// - 1500mA and 2000mA settings require heatsink and adequate airflow
+// - Never leave device unattended during charge/discharge cycles
+//
+// COMPONENT REFERENCES:
+// ==================================================
+// U6: LM385-1.2V (Voltage reference for ADC calibration)
 
 #include <Wire.h>
 #include <Adafruit_GFX.h>
@@ -75,7 +101,7 @@ int PWM_Value = 0;
 int PWM_Index = 6;  // Default to 500mA
 
 float Capacity_f = 0;
-float Vref_Voltage = 1.26;
+float Vref_Voltage = 1.26;  // LM385-1.2V reference voltage ( adjust it for calibration, 1.227 default )
 float Vcc = 3.3;
 float BAT_Voltage = 0;
 float internalResistance = 0;
