@@ -771,6 +771,52 @@ void processCommand(JsonDocument& doc) {
         currentState = STATE_IR_MEASURE;
         beep(100);
     }
+    else if (strcmp(cmd, "start_batcheck") == 0) {
+        if (currentState != STATE_MENU) {
+            sendError("Operation already in progress");
+            return;
+        }
+        currentState = STATE_BATTERY_CHECK;
+        beep(100);
+    }
+    else if (strcmp(cmd, "start_storage") == 0) {
+        if (currentState != STATE_MENU) {
+            sendError("Operation already in progress");
+            return;
+        }
+        BAT_Voltage = measureBatteryVoltage();
+        if (BAT_Voltage < NO_BAT_level) {
+            sendError("No battery detected");
+            return;
+        }
+        if (BAT_Voltage < DAMAGE_BAT_level) {
+            sendError("Battery damaged (below 2.5V)");
+            return;
+        }
+        stateStartTime = millis();
+        Hour = Minute = Second = 0;
+        // Start charging or discharging immediately based on current voltage
+        if (BAT_Voltage < (STORAGE_TARGET_VOLTAGE - STORAGE_VOLTAGE_TOLERANCE)) {
+            // Below range: charge
+            digitalWrite(Mosfet_Pin, HIGH);
+            analogWrite(PWM_Pin, 0);  // Charging (0% PWM)
+        } else if (BAT_Voltage > (STORAGE_TARGET_VOLTAGE + STORAGE_VOLTAGE_TOLERANCE)) {
+            // Above range: discharge
+            digitalWrite(Mosfet_Pin, LOW);
+            // Calculate PWM for storage prep current
+            int targetPWM = map(STORAGE_PREP_CURRENT_MA, 0, Current[Array_Size - 1], 0, 255);
+            analogWrite(PWM_Pin, targetPWM);
+        } else {
+            // Already in range: go straight to complete
+            digitalWrite(Mosfet_Pin, LOW);
+            analogWrite(PWM_Pin, 0);
+            playCompletionChime();
+            currentState = STATE_COMPLETE;
+            return;
+        }
+        currentState = STATE_STORAGE_PREP;
+        beep(100);
+    }
     else if (strcmp(cmd, "abort") == 0) {
         resetToIdle();
         beep(100);
