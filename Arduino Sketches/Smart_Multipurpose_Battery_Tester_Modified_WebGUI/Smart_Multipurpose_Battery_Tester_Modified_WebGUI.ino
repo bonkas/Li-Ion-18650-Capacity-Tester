@@ -3,6 +3,7 @@
 // Based on original work by Open Green Energy, INDIA
 // Web GUI and state machine refactor added
 // https://www.instructables.com/DIY-Smart-Multipurpose-Battery-Tester/
+// modified by bonkas https://www.github.com/bonkas
 //>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
 
 #include <Wire.h>
