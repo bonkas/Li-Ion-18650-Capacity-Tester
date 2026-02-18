@@ -158,6 +158,13 @@ const float R2 = 100000.0;
 // Menu selection
 int selectedMode = 0;
 
+// ========================================= BUZZER/TONE SETTINGS ========================================
+// LEDC PWM configuration for tone generation
+const int LEDC_CHANNEL = 0;
+const int LEDC_TIMER = 0;
+const int LEDC_FREQUENCY = 5000;  // 5kHz PWM frequency
+const int LEDC_RESOLUTION = 8;    // 8-bit resolution
+
 // ========================================= WEB SERVER ========================================
 AsyncWebServer server(WEB_SERVER_PORT);
 AsyncWebSocket ws(WEBSOCKET_PATH);
@@ -188,6 +195,10 @@ void readButtons();
 void clearButtonStates();
 void resetToIdle();
 void beep(int duration);
+void playTone(int frequency, int duration);
+void playStartupChime();
+void playCompletionChime();
+void playErrorChime();
 
 float measureVcc();
 float measureBatteryVoltage();
@@ -237,6 +248,9 @@ void setup() {
     delay(100);
     clearButtonStates();
 
+    // Setup LEDC for tone generation on buzzer pin (new ESP32 API)
+    ledcAttach(Buzzer, LEDC_FREQUENCY, LEDC_RESOLUTION);
+
     // Initialize OLED
     if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
         Serial.println("OLED init failed");
@@ -271,6 +285,9 @@ void setup() {
     display.print(WiFi.softAPIP());
     display.display();
     delay(2000);
+
+    // Play startup chime
+    playStartupChime();
 
     // Initialize state
     currentState = STATE_MENU;
@@ -916,9 +933,64 @@ void resetToIdle() {
 }
 
 void beep(int duration) {
-    digitalWrite(Buzzer, HIGH);
+    // Simple beep using LEDC at 1000 Hz
+    ledcChangeFrequency(Buzzer, 1000, LEDC_RESOLUTION);
+    ledcWrite(Buzzer, 128);  // 50% duty cycle
     delay(duration);
-    digitalWrite(Buzzer, LOW);
+    ledcWrite(Buzzer, 0);    // Stop
+}
+
+// ========================================= TONE GENERATION ========================================
+// Play a single tone at specified frequency and duration
+void playTone(int frequency, int duration) {
+    if (frequency == 0) {
+        // Rest/silence
+        ledcWrite(Buzzer, 0);
+        delay(duration);
+    } else {
+        // Change frequency and set duty cycle to 50% for audible tone
+        ledcChangeFrequency(Buzzer, frequency, LEDC_RESOLUTION);
+        ledcWrite(Buzzer, 128);  // 50% duty cycle = 128 out of 255
+        delay(duration);
+        ledcWrite(Buzzer, 0);    // Stop tone
+    }
+}
+
+// Play startup chime (ascending pattern)
+void playStartupChime() {
+    // Rising scale: C5 -> D5 -> E5 -> G5 (pleasant ascending pattern)
+    playTone(523, 150);   // C5 (Middle C + 12 semitones)
+    delay(50);
+    playTone(587, 150);   // D5
+    delay(50);
+    playTone(659, 150);   // E5
+    delay(50);
+    playTone(784, 300);   // G5 (held longer for resolution)
+    delay(100);
+}
+
+// Play completion chime (descending pattern)
+void playCompletionChime() {
+    // Descending pattern: G5 -> E5 -> D5 -> C5 (pleasant descending resolution)
+    playTone(784, 150);   // G5
+    delay(50);
+    playTone(659, 150);   // E5
+    delay(50);
+    playTone(587, 150);   // D5
+    delay(50);
+    playTone(523, 300);   // C5 (held longer)
+    delay(100);
+}
+
+// Play error chime (warning tone - descending low notes)
+void playErrorChime() {
+    // Warning pattern: Low G -> Low F -> Low G (urgent warning)
+    playTone(392, 100);   // G4 (lower octave)
+    delay(50);
+    playTone(349, 100);   // F4
+    delay(50);
+    playTone(392, 200);   // G4 (held longer)
+    delay(50);
 }
 
 // ========================================= VOLTAGE MEASUREMENT ========================================
@@ -992,6 +1064,7 @@ void handleMenuState() {
             // Charge
             BAT_Voltage = measureBatteryVoltage();
             if (BAT_Voltage < NO_BAT_level) {
+                playErrorChime();
                 display.clearDisplay();
                 display.setCursor(15, 25);
                 display.print("EMPTY BAT SLOT");
@@ -1000,6 +1073,7 @@ void handleMenuState() {
                 return;
             }
             if (BAT_Voltage < DAMAGE_BAT_level) {
+                playErrorChime();
                 display.clearDisplay();
                 display.setCursor(25, 25);
                 display.print("BAT DAMAGED");
@@ -1023,6 +1097,7 @@ void handleMenuState() {
             // Analyze - go to configuration first
             BAT_Voltage = measureBatteryVoltage();
             if (BAT_Voltage < NO_BAT_level || BAT_Voltage < DAMAGE_BAT_level) {
+                playErrorChime();
                 display.clearDisplay();
                 display.setCursor(15, 25);
                 display.print(BAT_Voltage < NO_BAT_level ? "EMPTY BAT SLOT" : "BAT DAMAGED");
@@ -1034,6 +1109,25 @@ void handleMenuState() {
         }
         else if (selectedMode == 3) {
             // IR Test
+            BAT_Voltage = measureBatteryVoltage();
+            if (BAT_Voltage < NO_BAT_level) {
+                playErrorChime();
+                display.clearDisplay();
+                display.setCursor(15, 25);
+                display.print("EMPTY BAT SLOT");
+                display.display();
+                delay(2000);
+                return;
+            }
+            if (BAT_Voltage < DAMAGE_BAT_level) {
+                playErrorChime();
+                display.clearDisplay();
+                display.setCursor(25, 25);
+                display.print("BAT DAMAGED");
+                display.display();
+                delay(2000);
+                return;
+            }
             stateStartTime = millis();
             analogWrite(PWM_Pin, 0);
             digitalWrite(Mosfet_Pin, LOW);
@@ -1523,8 +1617,16 @@ void handleIRDisplayState() {
 }
 
 void handleCompleteState() {
-    // Wait for any button press
+    // Play completion chime once on entry
+    static bool chimePlayedComplete = false;
+    if (!chimePlayedComplete) {
+        playCompletionChime();
+        chimePlayedComplete = true;
+    }
+
+    // Reset flag when leaving this state
     if (Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+        chimePlayedComplete = false;
         currentState = STATE_MENU;
         return;
     }
