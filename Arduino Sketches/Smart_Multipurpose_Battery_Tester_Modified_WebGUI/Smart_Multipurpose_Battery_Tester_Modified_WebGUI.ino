@@ -1143,23 +1143,32 @@ void handleMenuState() {
         }
     }
 
-    // Display menu (adjusted spacing for 5 items)
+    // Display menu with scrolling (show max 4 items)
     display.clearDisplay();
     display.setTextSize(1);
     display.setCursor(20, 0);
     display.print("Select Mode:");
-    display.setCursor(15, 10);
-    display.print((selectedMode == 0) ? "> Charge" : "  Charge");
-    display.setCursor(15, 20);
-    display.print((selectedMode == 1) ? "> Discharge" : "  Discharge");
-    display.setCursor(15, 30);
-    display.print((selectedMode == 2) ? "> Analyze" : "  Analyze");
-    display.setCursor(15, 40);
-    display.print((selectedMode == 3) ? "> IR Test" : "  IR Test");
-    display.setCursor(15, 50);
-    display.print((selectedMode == 4) ? "> Bat Check" : "  Bat Check");
-    display.setCursor(15, 60);
-    display.print((selectedMode == 5) ? "> WiFi Info" : "  WiFi Info");
+    
+    // Calculate scroll position - keep selected item in view
+    int scrollOffset = 0;
+    if (selectedMode > 2) {
+        scrollOffset = selectedMode - 2;  // Keep selection near bottom
+    }
+    
+    // Display up to 4 menu items
+    const char* modes[] = {"Charge", "Discharge", "Analyze", "IR Test", "Bat Check", "WiFi Info"};
+    int yPos = 12;
+    for (int i = 0; i < 4 && (scrollOffset + i) < 6; i++) {
+        int modeIdx = scrollOffset + i;
+        display.setCursor(15, yPos);
+        if (modeIdx == selectedMode) {
+            display.print("> ");
+        } else {
+            display.print("  ");
+        }
+        display.print(modes[modeIdx]);
+        yPos += 12;
+    }
     display.display();
 }
 
@@ -1720,20 +1729,20 @@ void handleBatteryCheckState() {
     // Display battery voltage in real-time
     display.clearDisplay();
     display.setTextSize(1);
-    display.setCursor(20, 5);
+    display.setCursor(30, 0);
     display.print("Battery Check");
 
-    // Draw voltage box
+    // Draw voltage prominently
     display.setTextSize(2);
-    display.setCursor(15, 20);
+    display.setCursor(20, 14);
     display.print(BAT_Voltage, 2);
     display.print("V");
 
     // Display battery status
     display.setTextSize(1);
-    display.setCursor(10, 40);
+    display.setCursor(0, 32);
     if (BAT_Voltage < NO_BAT_level) {
-        display.print("Status: No Battery");
+        display.print("Status: No Batt");
     } else if (BAT_Voltage < DAMAGE_BAT_level) {
         display.print("Status: DAMAGED");
     } else if (BAT_Voltage >= FULL_BAT_level) {
@@ -1743,20 +1752,22 @@ void handleBatteryCheckState() {
     } else if (BAT_Voltage >= Min_BAT_level) {
         display.print("Status: Low");
     } else {
-        display.print("Status: Very Low");
+        display.print("Status: V Low");
     }
 
-    // Draw simple battery indicator bar
+    // Draw battery level bar (smaller, higher on display)
     int batteryPercent = constrain((BAT_Voltage - Min_BAT_level) / (FULL_BAT_level - Min_BAT_level) * 100, 0, 100);
-    int barWidth = (batteryPercent / 100.0) * 100;
-    display.setCursor(5, 52);
+    int barWidth = (batteryPercent / 100.0) * 90;
+    display.setCursor(0, 44);
     display.print("[");
-    display.fillRect(15, 50, constrain(barWidth, 0, 100), 8, WHITE);
-    display.drawRect(15, 50, 100, 8, WHITE);
-    display.setCursor(120, 52);
-    display.print("]");
+    display.fillRect(10, 42, constrain(barWidth, 0, 90), 6, WHITE);
+    display.drawRect(10, 42, 90, 6, WHITE);
+    display.setCursor(105, 44);
+    display.print("] ");
+    display.print(batteryPercent);
+    display.print("%");
 
-    display.setCursor(5, 62);
+    display.setCursor(0, 56);
     display.print("Press any btn: Back");
     display.display();
 }
