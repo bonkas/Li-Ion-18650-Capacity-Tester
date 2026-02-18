@@ -1064,13 +1064,13 @@ int getCurrentMA() {
 
 // ========================================= STATE HANDLERS ========================================
 void handleMenuState() {
-    // Handle button navigation (6 menu items: 0-5)
+    // Handle button navigation (7 menu items: 0-6)
     if (UP_Button.wasReleased()) {
-        selectedMode = (selectedMode == 0) ? 5 : selectedMode - 1;
+        selectedMode = (selectedMode == 0) ? 6 : selectedMode - 1;
         beep(100);
     }
     if (Down_Button.wasReleased()) {
-        selectedMode = (selectedMode == 5) ? 0 : selectedMode + 1;
+        selectedMode = (selectedMode == 6) ? 0 : selectedMode + 1;
         beep(100);
     }
     if (Mode_Button.wasReleased()) {
