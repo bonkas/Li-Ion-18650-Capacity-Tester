@@ -1769,8 +1769,8 @@ void handleBatteryCheckState() {
     int barWidth = (batteryPercent / 100.0) * 70;  // Shorter bar (70 instead of 90)
     display.setCursor(0, 44);
     display.print("[");
-    display.fillRect(10, 42, constrain(barWidth, 0, 70), 6, WHITE);
-    display.drawRect(10, 42, 70, 6, WHITE);
+    display.fillRect(10, 45, constrain(barWidth, 0, 70), 6, WHITE);
+    display.drawRect(10, 45, 70, 6, WHITE);
     display.setCursor(85, 44);
     display.print("] ");
     display.print(batteryPercent);
