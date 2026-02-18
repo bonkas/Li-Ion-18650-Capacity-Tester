@@ -311,14 +311,20 @@ float Vref_Voltage = 1.26;  // LM385-1.2V reference voltage ( adjust it for cali
 
 1. **Establish baseline**: Note the current value (default: 1.26V)
 2. **Measure reference voltage**: Use a calibrated multimeter to check an actual battery voltage
-3. **Compare with device**: Discharge the same battery on the tester and note the voltage reading
-4. **Calculate correction factor**:
-   - If device reads **HIGH** compared to multimeter: decrease `Vref_Voltage`
-   - If device reads **LOW** compared to multimeter: increase `Vref_Voltage`
+3. **Compare with device**: Measure the same battery on the tester and note the voltage reading
+4. **Calculate error percentage**:
+   - Error% = (Device_Reading - Multimeter_Reading) / Multimeter_Reading × 100
 5. **Apply proportional adjustment**:
-   - Example: If reading is 5% high, multiply by 0.95: `1.227 × 0.95 = 1.166`
-   - Recompile and test with another battery
-6. **Repeat** until readings match your reference multimeter (within ±2%)
+   - **If reading is HIGH** (positive error):
+     - Correction_Factor = 1 - (Error% / 100)
+     - New_Vref = Old_Vref × Correction_Factor
+     - Example: If 5% high: `1.227 × (1 - 0.05) = 1.227 × 0.95 = 1.166`
+   - **If reading is LOW** (negative error):
+     - Correction_Factor = 1 + (|Error%| / 100)
+     - New_Vref = Old_Vref × Correction_Factor
+     - Example: If 3% low: `1.227 × (1 + 0.03) = 1.227 × 1.03 = 1.264`
+6. **Test adjustment**: Recompile and test with another battery
+7. **Repeat** until readings match your reference multimeter (within ±2%)
 
 ### Notes
 

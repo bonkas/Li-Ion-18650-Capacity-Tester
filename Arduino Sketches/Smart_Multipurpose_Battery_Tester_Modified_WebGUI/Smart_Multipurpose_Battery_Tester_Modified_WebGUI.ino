@@ -16,10 +16,19 @@
 // 1. Set the constant to a known good value (start with 1.227)
 // 2. Measure a known battery voltage with this device
 // 3. Compare with a calibrated multimeter
-// 4. Adjust the constant proportionally:
-//    If reading is HIGH, decrease the value
-//    If reading is LOW, increase the value
-// 5. Example: If reading is 5% high, multiply 1.227 × 0.95 = 1.166
+// 4. Calculate the error percentage:
+//    Error% = (Device_Reading - Multimeter_Reading) / Multimeter_Reading * 100
+// 5. Apply proportional adjustment:
+//    If reading is HIGH (positive error):
+//      Correction_Factor = 1 - (Error% / 100)
+//      New_Vref = Old_Vref × Correction_Factor
+//      Example: If 5% high: 1.227 × (1 - 0.05) = 1.227 × 0.95 = 1.166
+//    If reading is LOW (negative error):
+//      Correction_Factor = 1 - (Error% / 100)  [negative error = subtract]
+//      New_Vref = Old_Vref × Correction_Factor
+//      Example: If 3% low: 1.227 × (1 + 0.03) = 1.227 × 1.03 = 1.264
+// 6. Recompile and test with another battery
+// 7. Repeat steps 2-6 until readings match your multimeter (within ±2%)
 //
 // HARDWARE NOTES:
 // ==================================================
@@ -1735,7 +1744,7 @@ void handleBatteryCheckState() {
     // Draw voltage prominently
     display.setTextSize(2);
     display.setCursor(20, 14);
-    display.print(BAT_Voltage, 2);
+    display.print(BAT_Voltage, 3);
     display.print("V");
 
     // Display battery status
@@ -1757,12 +1766,12 @@ void handleBatteryCheckState() {
 
     // Draw battery level bar (smaller, higher on display)
     int batteryPercent = constrain((BAT_Voltage - Min_BAT_level) / (FULL_BAT_level - Min_BAT_level) * 100, 0, 100);
-    int barWidth = (batteryPercent / 100.0) * 90;
+    int barWidth = (batteryPercent / 100.0) * 70;  // Shorter bar (70 instead of 90)
     display.setCursor(0, 44);
     display.print("[");
-    display.fillRect(10, 42, constrain(barWidth, 0, 90), 6, WHITE);
-    display.drawRect(10, 42, 90, 6, WHITE);
-    display.setCursor(105, 44);
+    display.fillRect(10, 42, constrain(barWidth, 0, 70), 6, WHITE);
+    display.drawRect(10, 42, 70, 6, WHITE);
+    display.setCursor(85, 44);
     display.print("] ");
     display.print(batteryPercent);
     display.print("%");
