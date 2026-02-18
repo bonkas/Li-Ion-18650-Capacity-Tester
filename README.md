@@ -29,6 +29,7 @@ This repository contains three versions of the firmware:
 | **Discharge** | Discharges battery at selectable current (0-2000mA) to measure capacity |
 | **Analyze** | Full cycle: charge to full, rest, then discharge to measure true capacity. Supports optional staged discharge with different currents. |
 | **IR Test** | Measures internal resistance using voltage drop under load |
+| **Bat Check** | Real-time voltage monitoring with battery status indicator - useful for calibration verification |
 | **WiFi Info** | Displays current WiFi connection status and IP addresses (Web GUI version) |
 
 ### Key Capabilities
@@ -244,6 +245,19 @@ Staged discharge allows more accurate capacity measurement by:
    - Open circuit voltage (no load)
    - Voltage under 500mA load
 3. Internal resistance is calculated and displayed in milliohms
+
+### Battery Check Mode
+
+1. Select **Bat Check** from the main menu
+2. Real-time voltage monitoring:
+   - Voltage displayed continuously (updates every loop cycle)
+   - Battery status indicator: No Battery, Damaged, Low, Good, Full
+   - Visual battery level bar
+3. Useful for:
+   - Verifying voltage calibration against a multimeter
+   - Quick battery health check before operations
+   - Troubleshooting voltage reading accuracy (see calibration section)
+4. Press any button to return to menu
 
 ### WiFi Info (Web GUI Version)
 

@@ -76,6 +76,7 @@ enum DeviceState {
     STATE_IR_DISPLAY,
     STATE_COMPLETE,
     STATE_WIFI_INFO,
+    STATE_BATTERY_CHECK,            // Real-time voltage monitoring
     STATE_ANALYZE_CONFIG_TOGGLE,    // Enable/disable staged mode
     STATE_ANALYZE_CONFIG_STAGE1,    // Stage 1: current + transition voltage
     STATE_ANALYZE_CONFIG_STAGE2     // Stage 2: current + final cutoff
@@ -206,6 +207,7 @@ void handleIRMeasureState();
 void handleIRDisplayState();
 void handleCompleteState();
 void handleWiFiInfoState();
+void handleBatteryCheckState();
 void handleAnalyzeConfigToggleState();
 void handleAnalyzeConfigStage1State();
 void handleAnalyzeConfigStage2State();
@@ -316,6 +318,9 @@ void loop() {
             break;
         case STATE_WIFI_INFO:
             handleWiFiInfoState();
+            break;
+        case STATE_BATTERY_CHECK:
+            handleBatteryCheckState();
             break;
         case STATE_ANALYZE_CONFIG_TOGGLE:
             handleAnalyzeConfigToggleState();
@@ -966,13 +971,13 @@ int getCurrentMA() {
 
 // ========================================= STATE HANDLERS ========================================
 void handleMenuState() {
-    // Handle button navigation (5 menu items: 0-4)
+    // Handle button navigation (6 menu items: 0-5)
     if (UP_Button.wasReleased()) {
-        selectedMode = (selectedMode == 0) ? 4 : selectedMode - 1;
+        selectedMode = (selectedMode == 0) ? 5 : selectedMode - 1;
         beep(100);
     }
     if (Down_Button.wasReleased()) {
-        selectedMode = (selectedMode == 4) ? 0 : selectedMode + 1;
+        selectedMode = (selectedMode == 5) ? 0 : selectedMode + 1;
         beep(100);
     }
     if (Mode_Button.wasReleased()) {
@@ -1031,6 +1036,10 @@ void handleMenuState() {
             currentState = STATE_IR_MEASURE;
         }
         else if (selectedMode == 4) {
+            // Battery Check
+            currentState = STATE_BATTERY_CHECK;
+        }
+        else if (selectedMode == 5) {
             // WiFi Info
             currentState = STATE_WIFI_INFO;
         }
@@ -1039,18 +1048,20 @@ void handleMenuState() {
     // Display menu (adjusted spacing for 5 items)
     display.clearDisplay();
     display.setTextSize(1);
-    display.setCursor(25, 0);
+    display.setCursor(20, 0);
     display.print("Select Mode:");
-    display.setCursor(20, 11);
+    display.setCursor(15, 10);
     display.print((selectedMode == 0) ? "> Charge" : "  Charge");
-    display.setCursor(20, 22);
+    display.setCursor(15, 20);
     display.print((selectedMode == 1) ? "> Discharge" : "  Discharge");
-    display.setCursor(20, 33);
+    display.setCursor(15, 30);
     display.print((selectedMode == 2) ? "> Analyze" : "  Analyze");
-    display.setCursor(20, 44);
+    display.setCursor(15, 40);
     display.print((selectedMode == 3) ? "> IR Test" : "  IR Test");
-    display.setCursor(20, 55);
-    display.print((selectedMode == 4) ? "> WiFi Info" : "  WiFi Info");
+    display.setCursor(15, 50);
+    display.print((selectedMode == 4) ? "> Bat Check" : "  Bat Check");
+    display.setCursor(15, 60);
+    display.print((selectedMode == 5) ? "> WiFi Info" : "  WiFi Info");
     display.display();
 }
 
@@ -1585,6 +1596,61 @@ void handleWiFiInfoState() {
     }
 
     display.setCursor(0, 56);
+    display.print("Press any btn: Back");
+    display.display();
+}
+
+// ========================================= BATTERY CHECK HANDLER ========================================
+void handleBatteryCheckState() {
+    // Return to menu on any button press
+    if (Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
+        currentState = STATE_MENU;
+        return;
+    }
+
+    // Measure voltage continuously
+    BAT_Voltage = measureBatteryVoltage();
+
+    // Display battery voltage in real-time
+    display.clearDisplay();
+    display.setTextSize(1);
+    display.setCursor(20, 5);
+    display.print("Battery Check");
+
+    // Draw voltage box
+    display.setTextSize(2);
+    display.setCursor(15, 20);
+    display.print(BAT_Voltage, 2);
+    display.print("V");
+
+    // Display battery status
+    display.setTextSize(1);
+    display.setCursor(10, 40);
+    if (BAT_Voltage < NO_BAT_level) {
+        display.print("Status: No Battery");
+    } else if (BAT_Voltage < DAMAGE_BAT_level) {
+        display.print("Status: DAMAGED");
+    } else if (BAT_Voltage >= FULL_BAT_level) {
+        display.print("Status: FULL");
+    } else if (BAT_Voltage >= Max_BAT_level) {
+        display.print("Status: Good");
+    } else if (BAT_Voltage >= Min_BAT_level) {
+        display.print("Status: Low");
+    } else {
+        display.print("Status: Very Low");
+    }
+
+    // Draw simple battery indicator bar
+    int batteryPercent = constrain((BAT_Voltage - Min_BAT_level) / (FULL_BAT_level - Min_BAT_level) * 100, 0, 100);
+    int barWidth = (batteryPercent / 100.0) * 100;
+    display.setCursor(5, 52);
+    display.print("[");
+    display.fillRect(15, 50, constrain(barWidth, 0, 100), 8, WHITE);
+    display.drawRect(15, 50, 100, 8, WHITE);
+    display.setCursor(120, 52);
+    display.print("]");
+
+    display.setCursor(5, 62);
     display.print("Press any btn: Back");
     display.display();
 }
