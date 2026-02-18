@@ -88,7 +88,8 @@ enum DeviceState {
     STATE_BATTERY_CHECK,            // Real-time voltage monitoring
     STATE_ANALYZE_CONFIG_TOGGLE,    // Enable/disable staged mode
     STATE_ANALYZE_CONFIG_STAGE1,    // Stage 1: current + transition voltage
-    STATE_ANALYZE_CONFIG_STAGE2     // Stage 2: current + final cutoff
+    STATE_ANALYZE_CONFIG_STAGE2,    // Stage 2: current + final cutoff
+    STATE_STORAGE_PREP              // Storage prep: charge/discharge to 3.8V
 };
 
 DeviceState currentState = STATE_MENU;
@@ -156,6 +157,9 @@ const byte Mosfet_Pin = D2;
 
 // Charge current set by R7 (1k) on LP4060: I = 1000mA
 const int CHARGE_CURRENT_MA = 1000;
+const int STORAGE_PREP_CURRENT_MA = 400;  // Lower current for storage prep precision
+const float STORAGE_TARGET_VOLTAGE = 3.8;  // Ideal storage voltage for Li-Ion
+const float STORAGE_VOLTAGE_TOLERANCE = 0.05;  // ±0.05V tolerance (3.75-3.85V range)
 
 // Battery icon animation
 int batteryLevel = 0;
@@ -231,6 +235,7 @@ void handleBatteryCheckState();
 void handleAnalyzeConfigToggleState();
 void handleAnalyzeConfigStage1State();
 void handleAnalyzeConfigStage2State();
+void handleStoragePrepState();
 
 void drawBatteryOutline();
 void drawBatteryFill(int level);
@@ -360,6 +365,9 @@ void loop() {
             break;
         case STATE_ANALYZE_CONFIG_STAGE2:
             handleAnalyzeConfigStage2State();
+            break;
+        case STATE_STORAGE_PREP:
+            handleStoragePrepState();
             break;
         default:
             currentState = STATE_MENU;
@@ -1147,6 +1155,31 @@ void handleMenuState() {
             currentState = STATE_BATTERY_CHECK;
         }
         else if (selectedMode == 5) {
+            // Storage Prep
+            stateStartTime = millis();
+            Hour = Minute = Second = 0;
+            // Start charging or discharging immediately based on current voltage
+            if (BAT_Voltage < (STORAGE_TARGET_VOLTAGE - STORAGE_VOLTAGE_TOLERANCE)) {
+                // Below range: charge
+                digitalWrite(Mosfet_Pin, HIGH);
+                analogWrite(PWM_Pin, 0);  // Charging (0% PWM)
+            } else if (BAT_Voltage > (STORAGE_TARGET_VOLTAGE + STORAGE_VOLTAGE_TOLERANCE)) {
+                // Above range: discharge
+                digitalWrite(Mosfet_Pin, LOW);
+                // Calculate PWM for storage prep current
+                int targetPWM = map(STORAGE_PREP_CURRENT_MA, 0, Current[Array_Size - 1], 0, 255);
+                analogWrite(PWM_Pin, targetPWM);
+            } else {
+                // Already in range: go straight to complete
+                digitalWrite(Mosfet_Pin, LOW);
+                analogWrite(PWM_Pin, 0);
+                playCompletionChime();
+                currentState = STATE_COMPLETE;
+                return;
+            }
+            currentState = STATE_STORAGE_PREP;
+        }
+        else if (selectedMode == 6) {
             // WiFi Info
             currentState = STATE_WIFI_INFO;
         }
@@ -1165,9 +1198,9 @@ void handleMenuState() {
     }
     
     // Display up to 4 menu items
-    const char* modes[] = {"Charge", "Discharge", "Analyze", "IR Test", "Bat Check", "WiFi Info"};
+    const char* modes[] = {"Charge", "Discharge", "Analyze", "IR Test", "Bat Check", "Storage", "WiFi Info"};
     int yPos = 12;
-    for (int i = 0; i < 4 && (scrollOffset + i) < 6; i++) {
+    for (int i = 0; i < 4 && (scrollOffset + i) < 7; i++) {
         int modeIdx = scrollOffset + i;
         display.setCursor(15, yPos);
         if (modeIdx == selectedMode) {
@@ -1778,6 +1811,106 @@ void handleBatteryCheckState() {
 
     display.setCursor(0, 56);
     display.print("Press any btn: Back");
+    display.display();
+}
+
+// ========================================= STORAGE PREP HANDLER ========================================
+void handleStoragePrepState() {
+    // Check for abort
+    if (Mode_Button.wasReleased()) {
+        resetToIdle();
+        beep(100);
+        delay(100);
+        beep(100);
+        currentState = STATE_MENU;
+        return;
+    }
+
+    updateTiming();
+    BAT_Voltage = measureBatteryVoltage();
+
+    // Check if battery is in acceptable range (3.75V - 3.85V)
+    if (BAT_Voltage >= (STORAGE_TARGET_VOLTAGE - STORAGE_VOLTAGE_TOLERANCE) &&
+        BAT_Voltage <= (STORAGE_TARGET_VOLTAGE + STORAGE_VOLTAGE_TOLERANCE)) {
+        // Target reached! Stop charging/discharging
+        digitalWrite(Mosfet_Pin, LOW);
+        analogWrite(PWM_Pin, 0);
+        beep(100);
+        delay(50);
+        beep(100);
+        playCompletionChime();
+        currentState = STATE_COMPLETE;
+        return;
+    }
+
+    // Check for battery errors
+    if (BAT_Voltage < NO_BAT_level) {
+        playErrorChime();
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setCursor(35, 20);
+        display.print("No Battery");
+        display.setCursor(25, 35);
+        display.print("Detected!");
+        display.display();
+        delay(2000);
+        resetToIdle();
+        currentState = STATE_MENU;
+        return;
+    }
+    
+    if (BAT_Voltage < DAMAGE_BAT_level) {
+        playErrorChime();
+        display.clearDisplay();
+        display.setTextSize(1);
+        display.setCursor(30, 20);
+        display.print("Battery");
+        display.setCursor(20, 35);
+        display.print("DAMAGED!");
+        display.display();
+        delay(2000);
+        resetToIdle();
+        currentState = STATE_MENU;
+        return;
+    }
+
+    // Adjust charging/discharging based on current voltage
+    if (BAT_Voltage < (STORAGE_TARGET_VOLTAGE - STORAGE_VOLTAGE_TOLERANCE)) {
+        // Below range: charge
+        digitalWrite(Mosfet_Pin, HIGH);
+        analogWrite(PWM_Pin, 0);  // Charging (0% PWM)
+    } else {
+        // Above range: discharge
+        digitalWrite(Mosfet_Pin, LOW);
+        // Calculate PWM for storage prep current
+        int targetPWM = map(STORAGE_PREP_CURRENT_MA, 0, Current[Array_Size - 1], 0, 255);
+        analogWrite(PWM_Pin, targetPWM);
+    }
+
+    // Update display
+    display.clearDisplay();
+    updateBatteryDisplay(true);
+    display.setTextSize(1);
+    display.setCursor(5, 5);
+    if (BAT_Voltage < (STORAGE_TARGET_VOLTAGE - STORAGE_VOLTAGE_TOLERANCE)) {
+        display.print("Storage: Charging");
+    } else {
+        display.print("Storage: Discharging");
+    }
+    display.setCursor(5, 18);
+    display.print("Time:");
+    display.print(Hour);
+    display.print(":");
+    display.print(Minute);
+    display.print(":");
+    display.print(Second);
+    display.setCursor(5, 31);
+    display.print("Target: 3.8V");
+    display.setCursor(5, 48);
+    display.setTextSize(2);
+    display.print("V:");
+    display.print(BAT_Voltage, 2);
+    display.print("V");
     display.display();
 }
 

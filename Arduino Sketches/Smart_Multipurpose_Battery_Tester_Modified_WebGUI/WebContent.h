@@ -46,7 +46,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
 
         .mode-buttons {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(3, 1fr);
             gap: 10px;
             margin-bottom: 15px;
         }
@@ -290,6 +290,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             <button class="mode-btn discharge" onclick="selectMode('discharge')" id="btnDischarge">Discharge</button>
             <button class="mode-btn analyze" onclick="selectMode('analyze')" id="btnAnalyze">Analyze</button>
             <button class="mode-btn ir" onclick="selectMode('ir')" id="btnIR">IR Test</button>
+            <button class="mode-btn" onclick="selectMode('batcheck')" id="btnBatCheck" style="border-left: 3px solid #9b59b6;">Bat Check</button>
+            <button class="mode-btn" onclick="selectMode('storage')" id="btnStorage" style="border-left: 3px solid #1abc9c;">Storage</button>
         </div>
 
         <div class="card" id="dischargeSettings" style="display:none;">
@@ -708,7 +710,7 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             document.getElementById('stopBtn').disabled = !isRunning;
 
             // Disable mode selection while running
-            ['btnCharge', 'btnDischarge', 'btnAnalyze', 'btnIR'].forEach(id => {
+            ['btnCharge', 'btnDischarge', 'btnAnalyze', 'btnIR', 'btnBatCheck', 'btnStorage'].forEach(id => {
                 document.getElementById(id).disabled = isRunning;
             });
 
@@ -723,6 +725,10 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
                 document.getElementById('btnDischarge').classList.add('active');
             } else if (data.mode === 'ir') {
                 document.getElementById('btnIR').classList.add('active');
+            } else if (data.mode === 'batcheck') {
+                document.getElementById('btnBatCheck').classList.add('active');
+            } else if (data.mode === 'storage') {
+                document.getElementById('btnStorage').classList.add('active');
             }
         }
 
@@ -742,6 +748,8 @@ const char INDEX_HTML[] PROGMEM = R"rawliteral(
             else if (mode === 'discharge') document.getElementById('btnDischarge').classList.add('selected');
             else if (mode === 'analyze') document.getElementById('btnAnalyze').classList.add('selected');
             else if (mode === 'ir') document.getElementById('btnIR').classList.add('selected');
+            else if (mode === 'batcheck') document.getElementById('btnBatCheck').classList.add('selected');
+            else if (mode === 'storage') document.getElementById('btnStorage').classList.add('selected');
 
             // Show/hide settings panels
             document.getElementById('dischargeSettings').style.display =
