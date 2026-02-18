@@ -1219,7 +1219,6 @@ void handleMenuState() {
                 // Already in range: go straight to complete
                 digitalWrite(Mosfet_Pin, LOW);
                 analogWrite(PWM_Pin, 0);
-                playCompletionChime();
                 currentState = STATE_COMPLETE;
                 return;
             }
@@ -1805,7 +1804,7 @@ void handleWiFiInfoState() {
 
 // ========================================= BATTERY CHECK HANDLER ========================================
 void handleBatteryCheckState() {
-    // Return to menu on any button press
+    // Return to menu on any button press or abort command
     if (Mode_Button.wasReleased() || UP_Button.wasReleased() || Down_Button.wasReleased()) {
         currentState = STATE_MENU;
         return;
@@ -1814,23 +1813,18 @@ void handleBatteryCheckState() {
     // Measure voltage continuously
     BAT_Voltage = measureBatteryVoltage();
 
-    // Display battery voltage in real-time
+    // Display battery voltage and status only
     display.clearDisplay();
-    display.setTextSize(1);
-    display.setCursor(30, 0);
-    display.print("Battery Check");
-
-    // Draw voltage prominently
     display.setTextSize(2);
-    display.setCursor(20, 14);
+    display.setCursor(15, 5);
     display.print(BAT_Voltage, 3);
     display.print("V");
 
     // Display battery status
     display.setTextSize(1);
-    display.setCursor(0, 32);
+    display.setCursor(0, 25);
     if (BAT_Voltage < NO_BAT_level) {
-        display.print("Status: No Batt");
+        display.print("Status: No Battery");
     } else if (BAT_Voltage < DAMAGE_BAT_level) {
         display.print("Status: DAMAGED");
     } else if (BAT_Voltage >= FULL_BAT_level) {
@@ -1840,18 +1834,13 @@ void handleBatteryCheckState() {
     } else if (BAT_Voltage >= Min_BAT_level) {
         display.print("Status: Low");
     } else {
-        display.print("Status: V Low");
+        display.print("Status: Very Low");
     }
 
-    // Draw battery level bar (smaller, higher on display)
+    // Display charge percentage
     int batteryPercent = constrain((BAT_Voltage - Min_BAT_level) / (FULL_BAT_level - Min_BAT_level) * 100, 0, 100);
-    int barWidth = (batteryPercent / 100.0) * 70;  // Shorter bar (70 instead of 90)
-    display.setCursor(0, 44);
-    display.print("[");
-    display.fillRect(10, 45, constrain(barWidth, 0, 70), 6, WHITE);
-    display.drawRect(10, 45, 70, 6, WHITE);
-    display.setCursor(85, 44);
-    display.print("] ");
+    display.setCursor(0, 38);
+    display.print("Charge: ");
     display.print(batteryPercent);
     display.print("%");
 
@@ -1884,7 +1873,6 @@ void handleStoragePrepState() {
         beep(100);
         delay(50);
         beep(100);
-        playCompletionChime();
         currentState = STATE_COMPLETE;
         return;
     }
